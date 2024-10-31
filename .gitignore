@@ -20,3 +20,7 @@ venv/
 # Other
 .idea/
 .vscode/
+
+.ignore/
+
+.ipynb_checkpoints/

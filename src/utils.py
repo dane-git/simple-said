@@ -2,9 +2,11 @@ import json
 import blake3
 import base64
 
-import json
+import datetime
 import sys
 import os
+
+import shutil
 
 def load_json_from_file(file_path):
     """
@@ -106,6 +108,52 @@ def dict_to_said_str(data_dict):
     json_str = json.dumps(data_dict, separators=(',', ':'))
     return json_str
   
+def create_backup_directory(existing_dir):
+    """
+    Creates a new directory in the same location as `existing_dir` with a timestamp.
+
+    Parameters:
+        existing_dir (str): The path of the existing directory.
+
+    Returns:
+        str: The path of the new backup directory.
+    """
+    # Get the current timestamp in the required format
+    timestamp = datetime.datetime.now().strftime("%m%d%Y_%H%M%S")
+    
+    # Construct the new directory name
+    new_dir_name = f"{os.path.basename(existing_dir)}_bu_{timestamp}"
+    
+    # Get the parent directory path
+    parent_dir = os.path.dirname(existing_dir)
+    
+    # Full path for the new directory
+    new_dir_path = os.path.join(parent_dir, new_dir_name)
+    
+    # Create the new directory
+    os.makedirs(new_dir_path, exist_ok=True)
+    
+    print(f"Created new directory: {new_dir_path}")
+    return new_dir_path
+
+
+
+def copy_file(file_path, dest_dir):
+    os.makedirs(dest_dir, exist_ok=True)
+    if os.path.isfile(file_path):
+        shutil.copy(file_path, dest_dir)
+
+def remove_json_whitespace(file_path, out_file=None):
+    if out_file == None:
+        out_file = file_path
+    
+    data = load_json_from_file(file_path)
+
+    d = dict_to_said_str(data)
+
+    with open(out_file, 'w') as f:
+        f.write(d)
+    
   
 def blake3_256_from_dict(dictionary, print_dict=False):
     '''
