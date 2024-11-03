@@ -319,17 +319,19 @@ def substitute_derivation_code(aligned, deriv_code, padded):
   # calc prepended base64 chars and remove, then add derivation code.
   return deriv_code + aligned[padded//6:]
 
-def replace_said_label(d, label):
+def replace_said_label(d, label, length=44):
     c = d.copy()
     if label not in c:
         return f"ERROR label: {label} does not exist in dict"
-
-    c[label] = "#" * len(c[label])
+    if len(c[label]) > 0 and len(c[label]) %4 == 0:
+        c[label] = "#" * len(c[label])
+    else:
+        c[label] = "#" *length
     return c
 
 
 def determine_keri_version(stream):
-    # pattern for VERSION 1
+    
     version_1_pattern = r'\{"v":"(KERI|ACDC)[0-9a-f]{2}(JSON|CBOR|MGPK|CESR)[0-9a-f]{6}_"'
     version_1_pattern_compiled = re.compile(version_1_pattern)
     
@@ -337,11 +339,13 @@ def determine_keri_version(stream):
     version_2_pattern_compiled = re.compile(version_2_pattern)
     # match_v2 = re.search(version_2_pattern_compiled, v_string_candidate)  
     
-    # thing should start with the version string 
     
     if is_bytes(stream):
-        stream = stream.decode('utf-8').replace(' ', '')
+        stream = stream.decode('utf-8')
     
+    stream =  stream.replace(' ', '')
+
+    # thing should start with the version string 
     v_string_candidate = stream[:24]
     
     match_v1 = re.search(version_1_pattern_compiled, v_string_candidate)
@@ -436,12 +440,7 @@ def get_version_string_info(v_string, version=1):
         stop_delim = v_string.index('.')
 
         _protocol = v_string[0:4]
-        __version = v_string[4:7]
-        _version = ''
-        for c in __version:
-            _version += str(value_of(c))
-            _version += '.'
-        _version = _version[:-1]
+        _version = '.'.join(str(value_of(c)) for c in v_string[4:7])
         _kind = v_string[7:11]
         _size = v_string[11:stop_delim]
         _size_length =b64_to_int(_size)

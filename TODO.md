@@ -5,3 +5,4 @@
     - [ ] check said with various options ( update/correct version string (v1 | v2))
 - [ ] add option to caculate and add saids: root, recursive?
 - [ ] better organize code. not everything in utils, etc.
+- [ ] check | update | calculate said.
