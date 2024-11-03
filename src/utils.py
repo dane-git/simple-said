@@ -5,7 +5,7 @@ import base64
 import datetime
 import sys
 import os
-
+import re
 import shutil
 
 def load_json_from_file(file_path):
@@ -33,9 +33,9 @@ def load_json_from_cli():
         SystemExit: If the required arguments are missing or if there are errors loading any JSON file.
     """
     # Ensure there’s an even number of arguments (each file has a path and a label)
-    # if (len(sys.argv) - 1) % 2 != 0:
-    #     print("Usage: python main.py <path1> <label1> <path2> <label2> ...")
-    #     sys.exit(1)
+    if (len(sys.argv) - 1) % 2 != 0:
+        print("Usage: python main.py <path1> <label1> <path2> <label2> ...")
+        sys.exit(1)
 
     _data = []
 
@@ -108,6 +108,56 @@ def dict_to_said_str(data_dict):
     json_str = json.dumps(data_dict, separators=(',', ':'))
     return json_str
   
+def dict_to_keri_byte_str(data_dict, to_bytes=True):
+    # Convert the dictionary to a JSON string without extra spaces after commas and colons
+    json_str = json.dumps(data_dict, separators=(',', ':'))
+    if to_bytes:
+        json_str = json_str.encode('utf-8')
+    return json_str
+
+def get_file_length_in_bytes(file_path):
+    """
+    Reads a file in as bytes and returns its length.
+
+    Parameters:
+        file_path (str): The path to the file.
+
+    Returns:
+        int: The length of the file in bytes.
+    """
+    with open(file_path, 'rb') as file:
+        file_bytes = file.read()
+        return len(file_bytes)
+def read_file_as_bytes(file_path):
+    with open(file_path, 'rb') as file:
+        file_bytes = file.read()
+        return file_bytes
+
+def is_bytes(obj):
+    return isinstance(obj, bytes)
+def is_string(obj):
+    return isinstance(obj, str)
+
+def byte_to_bits(byte):
+    return format(byte, '08b')
+  
+def bytes_to_bits(byte_array):
+    return ''.join(format(byte, '08b') for byte in byte_array)
+
+def get_file_length_in_chars(file_path):
+        """
+        Reads a file as a string and returns its character length.
+    
+        Parameters:
+            file_path (str): The path to the file.
+    
+        Returns:
+            int: The length of the file in characters.
+        """
+        with open(file_path, 'r', encoding='utf-8') as file:
+            file_content = file.read()
+            return len(file_content)
+
 def create_backup_directory(existing_dir):
     """
     Creates a new directory in the same location as `existing_dir` with a timestamp.
@@ -180,6 +230,45 @@ def nearest_higher_multiple(x, n):
     else:
         return ((x // n) + 1) * n
 
+B64_VALUES = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+def value_of(ch):
+  return B64_VALUES.index(ch)
+
+def b64_to_int(value):
+  result = 0
+
+  # Iterate over each character in the Base64 string
+  for ch in value:
+      result <<= 6  # Shift left by 6 bits
+      result |= value_of(ch)  # OR with the Base64 value of the character
+
+  return result
+
+def int_to_b64(value, length=4):
+    """
+    Converts an integer to a Base64 string of a specified length using the custom Base64 set.
+    Pads the front with 'A' if necessary to achieve the desired length.
+
+    Parameters:
+        value (int): The integer to convert.
+        length (int): The desired length of the Base64 string.
+
+    Returns:
+        str: The Base64 string representation of the integer, padded to the specified length.
+    """
+    if value < 0 or value >= (1 << (6 * length)):  # Ensure the integer fits in the specified length
+        raise ValueError(f"Integer value out of range for {length} Base64 characters")
+
+    # Convert integer to Base64 characters
+    b64_string = ""
+    for _ in range(length):
+        b64_string = B64_VALUES[value & 0x3F] + b64_string  # Get last 6 bits and prepend character
+        value >>= 6  # Shift value right by 6 bits for the next character
+
+    # If the resulting string is shorter than the desired length, pad with 'A' at the front
+    return b64_string.rjust(length, "A")
+
 
 def calc_pad_bits(byte_array, alignment = 24):
     """
@@ -237,6 +326,132 @@ def replace_said_label(d, label):
 
     c[label] = "#" * len(c[label])
     return c
+
+
+def determine_keri_version(stream):
+    # pattern for VERSION 1
+    version_1_pattern = r'\{"v":"(KERI|ACDC)[0-9a-f]{2}(JSON|CBOR|MGPK|CESR)[0-9a-f]{6}_"'
+    version_1_pattern_compiled = re.compile(version_1_pattern)
+    
+    version_2_pattern = r'\{"v":"(KERI|ACDC)([A-Za-z0-9_-]{3})(JSON|CBOR|MGPK|CESR)[A-Za-z0-9_-]{4}\."'
+    version_2_pattern_compiled = re.compile(version_2_pattern)
+    # match_v2 = re.search(version_2_pattern_compiled, v_string_candidate)  
+    
+    # thing should start with the version string 
+    
+    if is_bytes(stream):
+        stream = stream.decode('utf-8').replace(' ', '')
+    
+    v_string_candidate = stream[:24]
+    
+    match_v1 = re.search(version_1_pattern_compiled, v_string_candidate)
+    match_v2 = re.search(version_2_pattern_compiled, v_string_candidate)  
+
+    if match_v1 and not match_v2:
+        return 1
+    if match_v2 and not match_v1:
+        return 2
+    if match_v2 and match_v1:
+        return -1 # this is an error, should never happen
+    else:
+        return None
+        
+
+    
+        
+def get_version_string_info(v_string, version=1):
+
+    """
+    Parses a version string according to the specified version format for KERI/ACDC standards.
+
+    This function extracts details from a version string based on the CESR specification 
+    (https://trustoverip.github.io/tswg-cesr-specification/#version-string-field). It supports 
+    two versions of the version string format, each with specific terminators and fields.
+
+    Parameters:
+        v_string (str or bytes): The version string to parse, formatted as either:
+             - VERSION 1: `PPPPvvKKKKllllll_` (17 characters, ending with `_`)
+                - PPPP: Protocol (e.g., "KERI" or "ACDC")
+                - vv: Version in lowercase hexadecimal notation (major/minor)
+                - KKKK: Serialization kind (e.g., "JSON", "CBOR", "MGPK", "CESR")
+                - llllll: Size, an integer in lowercase hexadecimal notation
+                - Terminator: `_`
+
+            - VERSION 2: `PPPPVVVKKKKBBBB.` (16 characters, ending with `.`)
+                - PPPP: Protocol (e.g., "KERI" or "ACDC")
+                - VVV: Version (keri Base64-like notation, e.g., "CAA" for 2.00)
+                - KKKK: Serialization kind (e.g., "JSON", "CBOR", "MGPK", "CESR")
+                - BBBB: Size, an integer encoded in Base64 (use `b64_to_int` for decoding)
+                - Terminator: `.`
+           
+        version (int, optional): Specifies the keri Major version format to parse. 
+            Valid options are:
+            - 1: For VERSION 1 format.
+            - 2: For VERSION 2 format.
+            Defaults to 1.
+
+    Returns:
+        dict: A dictionary with parsed components of the version string:
+            - 'protocol' (str): The protocol identifier (e.g., "KERI", "ACDC").
+            - 'version' (str): The version, formatted as a dot-separated string 
+                (e.g., "2.00" for VERSION 2).
+            - 'kind' (str): The serialization type (e.g., "JSON", "CBOR").
+            - '_size' (str): The size field as a string (exact characters from v_string).
+            - 'size' (int): The decoded size value as an integer.
+
+    Raises:
+        ValueError: If an unrecognized `version` is provided or if `v_string` is not a valid 
+                    string or bytes representation.
+
+    Example:
+        >>> get_version_string_info('{"v":"ACDC200JSONAAhK."}', version=2)
+        {'protocol': 'ACDC', 'version': '2.00', 'kind': 'JSON', '_size': 'AAhK', 'size': 2122}
+
+    Notes:
+        - For VERSION 1, hexadecimal size values are converted using `int(_, 16)`.
+        - For VERSION 2, Base64 size values are converted using `b64_to_int`.
+    """
+
+    
+    KNOWN_VERSIONS = [1,2]
+    if version not in KNOWN_VERSIONS:
+         raise ValueError(f"Unrecognized version: '{version}'. Valid options are: {KNOWN_VERSIONS}")
+    
+    if not is_string(v_string):
+        v_string = v_string.decode()
+    
+    v_string = v_string.replace('"', '')
+    
+    if version == 1:
+        stop_delim = v_string.index('_')
+
+        _protocol = v_string[0:4]
+        _version = v_string[4:6]
+        _kind = v_string[6:10]
+        _size = v_string[10:stop_delim]
+        _size_length =int(_size, 16)
+    
+
+    elif version == 2:
+        stop_delim = v_string.index('.')
+
+        _protocol = v_string[0:4]
+        __version = v_string[4:7]
+        _version = ''
+        for c in __version:
+            _version += str(value_of(c))
+            _version += '.'
+        _version = _version[:-1]
+        _kind = v_string[7:11]
+        _size = v_string[11:stop_delim]
+        _size_length =b64_to_int(_size)
+    return {
+      'protocol': _protocol,
+      'version': _version,
+      'kind': _kind, # serial
+      '_size': _size, # digits
+      'size': _size_length
+    }
 
 def get_blake3_256_said(data, label, debug=False):
     _data2 = replace_said_label(data, label)
