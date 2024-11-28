@@ -7,7 +7,8 @@ import sys
 import os
 import re
 import shutil
-
+import pprint
+pp = pprint.PrettyPrinter(indent=2, sort_dicts=False)
 def load_json_from_file(file_path):
     """
     Loads a JSON file from the given file path and returns its contents as a dictionary.
@@ -22,44 +23,102 @@ def load_json_from_file(file_path):
         data = json.load(file)
     return data
 
+import sys
+import os
+import json
+import argparse
+
+
+import sys
+import os
+import json
+import argparse
+
+
 def load_json_from_cli():
     """
-    Reads JSON file paths and labels from command-line arguments and loads each file.
+    Reads JSON file paths, labels, and versions from command-line arguments and loads each file.
 
     Returns:
-        dict: A dictionary where each label maps to the contents of the corresponding JSON file.
+        list: A list of dictionaries where each entry contains metadata and the content of a JSON file.
 
     Raises:
         SystemExit: If the required arguments are missing or if there are errors loading any JSON file.
     """
-    # Ensure there’s an even number of arguments (each file has a path and a label)
-    if (len(sys.argv) - 1) % 2 != 0:
-        print("Usage: python main.py <path1> <label1> <path2> <label2> ...")
+    parser = argparse.ArgumentParser(description="Load JSON files and associate them with labels and versions.")
+    parser.add_argument(
+        "-i", "--input", action="append", required=True,
+        help="Specify input JSON file paths. Use -i multiple times for multiple files."
+    )
+    parser.add_argument(
+        "--label", "-d", "-l", nargs="*", action="append",
+        help="Optional labels corresponding to the input files. If not provided, inferred or set to None."
+    )
+    parser.add_argument(
+        "--version", "-v", nargs="*", action="append",
+        help="Optional versions corresponding to the input files. If not provided, inferred or set to None."
+    )
+
+    args = parser.parse_args()
+
+    # Flatten input files
+    # print('args.input ' , args.input )
+
+    # input_files = [file for sublist in args.input for file in sublist]
+    input_files = args.input
+    # print(input_files)
+
+    # Handle mismatched input counts
+    if args.label and len(args.label) > len(input_files):
+        print("Error: More labels than input files provided.")
+        sys.exit(1)
+    if args.version and len(args.version) > len(input_files):
+        print("Error: More versions than input files provided.")
         sys.exit(1)
 
-    _data = []
+    # Extend missing labels and versions with None
+    labels = (args.label or []) + [None] * (len(input_files) - len(args.label or []))
+    versions = (args.version or []) + [None] * (len(input_files) - len(args.version or []))
+    print('versions',  versions)
 
-    # Iterate over arguments in pairs (path and label)
+    data_list = []
 
-    for i in range(1, len(sys.argv), 2):
-        data = {}
-        file_path = sys.argv[i]
+    for idx, file_path in enumerate(input_files):
         file_name = os.path.splitext(os.path.basename(file_path))[0]
-        # print(i)
-        # print(file_path)
-        label = sys.argv[i + 1]
-        # print(label)
-        # Load JSON data for the given file path
+        label = labels[idx]
+        version = versions[idx]
+        print('file_name', file_name)
+        print(file_path)
         try:
-            with open(file_path, 'r') as file:
-                o = {'file_path': file_path,
-                     'file_name': file_name,
-                     'label': label,
-                     'data': {}}
-                d = json.load(file)
+            with open(file_path, "r") as file:
+                json_data = json.load(file)
 
-                o['data'] = d
-                _data.append(o)
+                # Infer label if not provided
+                if label is None:
+                    if "d" in json_data:
+                        label = "d"
+                    elif "$id" in json_data:
+                        label = "$id"
+                    else:
+                        label = None  # Set explicitly to None if not inferable
+
+                # Infer version if not provided
+                if version is None:
+                    if "v" in json_data:
+                        version = determine_keri_version(dict_to_said_str(json_data))
+                        # version = json_data["version"]
+                    else:
+                        version = None  # Set explicitly to None if not inferable
+
+                data_list.append(
+                    {
+                        "file_path": file_path,
+                        "file_name": file_name,
+                        "label": label,
+                        "version": version,
+                        "data": json_data,
+                    }
+                )
         except FileNotFoundError:
             print(f"Error: The file '{file_path}' was not found.")
             sys.exit(1)
@@ -67,7 +126,154 @@ def load_json_from_cli():
             print(f"Error: The file '{file_path}' is not valid JSON.")
             sys.exit(1)
 
-    return _data
+    return data_list
+
+
+if __name__ == "__main__":
+    loaded_data = load_json_from_cli()
+    print("Loaded Data:")
+    for entry in loaded_data:
+        print(entry)
+
+
+# def load_json_from_cli():
+#     """
+#     Reads JSON file paths and labels from command-line arguments and loads each file.
+
+#     Returns:
+#         dict: A dictionary where each label maps to the contents of the corresponding JSON file.
+
+#     Raises:
+#         SystemExit: If the required arguments are missing or if there are errors loading any JSON file.
+#     """
+#     parser = argparse.ArgumentParser(description="Load JSON files and associate them with labels.")
+#     parser.add_argument(
+#         "-i",
+#         "--input",
+#         nargs="+",
+#         action='append',
+#         required=True,
+#         help="List of input JSON file paths. Provide space-separated file paths.",
+#     )
+#     parser.add_argument(
+#         "--label", "-d", "-l", nargs="+", help="Optional labels corresponding to the input files.",
+#         action='append'
+#     )
+#     parser.add_argument("--version", "-v",  nargs="+" , action='append',
+#                         # action="store_true", 
+#                         help="Display version information.")
+
+#     args = parser.parse_args()
+#     input_files = [file for sublist in args.input for file in sublist]
+
+#     # Show version and exit if requested
+#     # if args.version:
+#     #     print("Version 1.0.0")
+#     #     sys.exit(0)
+
+#     if not args.input:
+#         print("Error: No input files provided.")
+#         sys.exit(1)
+
+#     if args.label and len(args.label) != len(args.input):
+#         print("Error: Number of labels must match the number of input files.")
+#         sys.exit(1)
+
+#     data_list = []
+
+#     for idx, file_path in enumerate(input_files):
+#         print('idx', idx)
+#         file_name = os.path.splitext(os.path.basename(file_path))[0]
+#         label = args.label[idx] if args.label else None
+#         version = args.label[idx] if args.label else None
+
+#         try:
+#             with open(file_path, "r") as file:
+#                 json_data = json.load(file)
+                
+#                 # If no label is provided, infer it from the file's data
+#                 if not label:
+#                     if "d" in json_data:
+#                         label = "d"
+#                     elif "$id" in json_data:
+#                         label = "$id"
+#                     else:
+#                         print(f"Error: Unable to infer label for file '{file_path}'.")
+#                         sys.exit(1)
+#                 if version is None:
+#                     version = determine_keri_version(dict_to_said_str(json_data))
+#                 data_list.append(
+#                     {
+#                         "file_path": file_path,
+#                         "file_name": file_name,
+#                         "label": label,
+#                         "data": json_data,
+#                         'version': version
+#                     }
+#                 )
+#         except FileNotFoundError:
+#             print(f"Error: The file '{file_path}' was not found.")
+#             sys.exit(1)
+#         except json.JSONDecodeError:
+#             print(f"Error: The file '{file_path}' is not valid JSON.")
+#             sys.exit(1)
+
+#     return data_list
+
+
+# if __name__ == "__main__":
+#     loaded_data = load_json_from_cli()
+#     print("Loaded Data:")
+#     for entry in loaded_data:
+#         print(entry)
+
+
+# def load_json_from_cli():
+#     """
+#     Reads JSON file paths and labels from command-line arguments and loads each file.
+
+#     Returns:
+#         dict: A dictionary where each label maps to the contents of the corresponding JSON file.
+
+#     Raises:
+#         SystemExit: If the required arguments are missing or if there are errors loading any JSON file.
+#     """
+#     # Ensure there’s an even number of arguments (each file has a path and a label)
+#     if (len(sys.argv) - 1) % 2 != 0:
+#         print("Usage: python main.py <path1> <label1> <path2> <label2> ...")
+#         sys.exit(1)
+
+#     _data = []
+
+#     # Iterate over arguments in pairs (path and label)
+
+#     for i in range(1, len(sys.argv), 2):
+#         data = {}
+#         file_path = sys.argv[i]
+#         file_name = os.path.splitext(os.path.basename(file_path))[0]
+#         # print(i)
+#         # print(file_path)
+#         label = sys.argv[i + 1]
+#         # print(label)
+#         # Load JSON data for the given file path
+#         try:
+#             with open(file_path, 'r') as file:
+#                 o = {'file_path': file_path,
+#                      'file_name': file_name,
+#                      'label': label,
+#                      'data': {}}
+#                 d = json.load(file)
+
+#                 o['data'] = d
+#                 _data.append(o)
+#         except FileNotFoundError:
+#             print(f"Error: The file '{file_path}' was not found.")
+#             sys.exit(1)
+#         except json.JSONDecodeError:
+#             print(f"Error: The file '{file_path}' is not valid JSON.")
+#             sys.exit(1)
+
+#     return _data
 
 def center_text(text, n, pad_char=' '):
     """
@@ -360,8 +566,28 @@ def determine_keri_version(stream):
     else:
         return None
         
+def collapse(obj, label):
+    """
+    Recursively collapses nested dictionaries to a specified label if it exists.
 
-    
+    Parameters:
+        obj (dict): The dictionary to collapse.
+        label (str): The field name to collapse on (e.g., 'id').
+
+    Returns:
+        dict: The collapsed dictionary.
+    """
+    collapsed_obj = {}
+
+    for key, value in obj.items():
+        if isinstance(value, dict) and label in value:
+            # Collapse to the specified label's value if it exists in the nested dictionary
+            collapsed_obj[key] = value[label]
+        else:
+            # Otherwise, keep the value as-is
+            collapsed_obj[key] = value
+
+    return collapsed_obj
         
 def get_version_string_info(v_string, version=1):
 
@@ -417,7 +643,7 @@ def get_version_string_info(v_string, version=1):
     """
 
     
-    KNOWN_VERSIONS = [1,2]
+    KNOWN_VERSIONS = [1,2,-1]
     if version not in KNOWN_VERSIONS:
          raise ValueError(f"Unrecognized version: '{version}'. Valid options are: {KNOWN_VERSIONS}")
     
@@ -425,7 +651,14 @@ def get_version_string_info(v_string, version=1):
         v_string = v_string.decode()
     
     v_string = v_string.replace('"', '')
-    
+    ## detect version from stop delim
+    if version == -1:
+        if v_string.endswith('.'):
+            version = 2
+        elif v_string.endswith('_'):
+            version = 1
+        else:
+            raise ValueError(f"Unrecognized version: '{version}'. {v_string}")
     if version == 1:
         stop_delim = v_string.index('_')
 
@@ -452,6 +685,337 @@ def get_version_string_info(v_string, version=1):
       'size': _size_length
     }
 
+
+def is_dict(obj):
+    return isinstance(obj, dict)
+
+def build_version(data, protocol, kind = 'JSON', major=1, minor=0):
+    if not is_bytes(data) and not is_string(data) and is_dict(data):
+        _data = dict_to_said_str(data)
+    elif is_bytes(data):
+        _data = data
+    elif is_string(data):
+        _data = data.encode()
+    
+    length = len(_data)
+
+    if len(protocol) != 4:
+        raise ValueError(f"protocol must be 4 characters: {protocol}: {len(protocol)}")
+
+    if major == 2:
+        # PPPPVVVKKKKBBBB.
+        major_rep = int_to_b64(major)[-1]
+        minor_rep = int_to_b64(minor)[:-2]
+
+        if len(str(minor_rep)) < 2:
+            minor_rep = 'A' + minor_rep
+        version_rep = major_rep + minor_rep
+        size = int_to_b64(length)
+        if len(size) < 4:
+            size = 'A' * (4 - len(size)) + size
+
+        return f"{protocol}{version_rep}{kind}{size}."
+    
+        
+    else:
+        #  version 1
+        # PPPPvvKKKKllllll_
+        if major == -1:
+            major = 1
+        major_rep = hex(major)[2:]
+        
+        minor_rep = hex(minor)[2:]
+        version_rep = major_rep + minor_rep
+        size = f"{length:06x}"
+        return f"{protocol}{version_rep}{kind}{size}_"
+    
+
+
+def vIsFirst(data, key='v'):
+    """
+    Checks if the specified key is the first key in the dictionary.
+
+    Parameters:
+        data (dict): The dictionary to check.
+        key: The key to check if it's at index 0. Defaults to 'v'.
+
+    Returns:
+        bool: True if the specified key is the first key, False otherwise.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("Input data must be a dictionary.")
+    
+    keys = list(data.keys())
+    return keys[0] == key if keys else False
+
+def mapPathsToLabel(data, label='d'):
+    """
+    Recursively finds paths to all leaves with a specified label in a nested dictionary or list.
+
+    Parameters:
+        data (dict or list): The input nested structure.
+        label (str): The target label to locate within the nested structure.
+
+    Returns:
+        list of list: A list of paths to each occurrence of the specified label.
+    """
+    paths = []
+
+    def recursive_find(value, current_path=[]):
+        # If it's a dictionary, check each key-value pair
+        if isinstance(value, dict):
+            for key, sub_value in value.items():
+                new_path = current_path + [key]
+                if key == label:
+                    # Add the path as a list if the key matches the target label
+                    paths.append(new_path)
+                else:
+                    # Otherwise, keep traversing deeper
+                    recursive_find(sub_value, new_path)
+        # If it's a list, traverse each index
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                recursive_find(item, current_path + [index])
+
+    # Start recursive search from the root
+    recursive_find(data)
+    # Sort paths by depth (deepest paths first)
+    paths.sort(key=lambda x: len(x), reverse=True)
+    return paths
+
+
+def getNestedObjectAndParent(data, path):
+    """
+    Retrieves a nested object and its parent from a dictionary or list by following a path represented by a list of keys.
+
+    Parameters:
+        data (dict or list): The dictionary or list to traverse.
+        path (list): A list of keys/indices representing the path to the nested object.
+
+    Returns:
+        tuple: (parent, current) where:
+            - current is the nested object if the path exists.
+            - parent is the dictionary or list containing the final key or index in the path, or None if the path is not fully valid.
+            - If any key in the path is not found, returns (None, None).
+    """
+    current = data
+    parent = None
+
+    for key in path:
+        if isinstance(current, dict) and key in current:
+            parent = current
+            current = current[key]
+        elif isinstance(current, list) and isinstance(key, int) and 0 <= key < len(current):
+            parent = current
+            current = current[key]
+        else:
+            # If the path is invalid, return (None, None)
+            return None, None
+
+    return parent, current
+
+def replaceNestedObject( data:dict, path:list, new_obj):
+    """
+    Replaces a nested object within a dictionary or list with a new object, based on a specified path,
+    without compacting any part of the structure.
+
+    Parameters:
+        data (dict or list): The original data (dictionary or list) to modify.
+        path (list): A list of keys/indices representing the path to the nested object to replace.
+        new_obj: The new object to insert at the specified path.
+
+    Returns:
+        bool: True if replacement was successful, False otherwise.
+    """
+    current = data
+    for key in path[:-1]:  # Traverse to the parent of the target location
+        if isinstance(current, dict) and key in current:
+            current = current[key]
+        elif isinstance(current, list) and isinstance(key, int) and 0 <= key < len(current):
+            current = current[key]
+        else:
+            # Path is not valid, return False to indicate no replacement was made
+            return False
+
+    # Replace the target object if the final key/index exists in the current structure
+    final_key = path[-1]
+    if isinstance(current, dict) and final_key in current:
+        current[final_key] = new_obj
+    elif isinstance(current, list) and isinstance(final_key, int) and 0 <= final_key < len(current):
+        current[final_key] = new_obj
+    else:
+        # If path is invalid for replacement, return False
+        return False
+
+    return True
+
+def deepcopy(data:dict):
+        """
+        Recursively creates a deep copy of a dictionary or list structure.
+
+        Parameters:
+            data (dict, list): The original dictionary or list to deep copy.
+
+        Returns:
+            A deep copy of the input data.
+        """
+        if isinstance(data, dict):
+            # Recursively deep copy each key-value pair in the dictionary
+            return {key: deepcopy(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            # Recursively deep copy each element in the list
+            return [deepcopy(element) for element in data]
+        else:
+            # For primitive types (int, str, float, etc.), return the value directly
+            return data
+
+def equal_in_list(e, _list):
+    for i in _list:
+        if e == i:
+            return True
+    return False
+
+def get_said(data, label='d', version=None, ):
+    d2 = replace_said_label(data, label)
+    vFirstFlag = False
+    # print(d2)
+    if 't' in  d2 and equal_in_list(d2['t'], ['icp', 'dip', 'vcp']):
+        d2 =  replace_said_label(d2, 'i')
+
+    ## calc and get version string if there
+    if 'v' in data and vIsFirst(data):
+        data_byte_str = dict_to_said_str(data)
+        if version == None:
+            version = determine_keri_version(data_byte_str)
+        if d2['v'].startswith('ACDC'):
+            proto_string = 'ACDC'
+        else:
+            proto_string = 'KERI'
+        v_field = build_version(data, proto_string, 'JSON', version, 0)
+        d2['v'] = v_field
+        
+
+
+    blake3_byte_arr = blake3_256_from_dict(d2)
+    to_pad = calc_pad_bits(blake3_byte_arr, 24)
+    aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
+    b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
+    said = substitute_derivation_code(b64_digest, 'E', to_pad)
+    
+    d2[label] = said
+    ## REPLACE 'i' on icp, dip, vcp
+    if 't' in  d2 and equal_in_list(d2['t'], ['icp', 'dip', 'vcp']):
+        d2['i'] = said
+        
+    return said, d2, said==data[label]
+
+def saidify(sad, label='d', version= -1):
+    """
+    Calculates and injects SAID values for specified paths within a nested dictionary (SAD) structure.
+    Produces both compacted and non-compacted versions of the SAD.
+
+    Parameters:
+        sad (dict): The source nested dictionary (SAD) to process.
+        code (str): The digest type code used for SAID derivation.
+        kind (str): Serialization format to override the SAD's 'v' field if specified.
+        label (str): Field name used to locate and collapse structures.
+        ignore (list): Optional list of fields to exclude from SAID calculations.
+
+    Returns:
+        dict: Contains 'paths', 'sads', 'saiders', 'compact', and 'non_compact' versions of the SAD.
+    """
+    # print('version', version)
+    this_version = -1
+    if 'v' in sad:
+        v_obj = get_version_string_info(sad['v'], -1)
+        this_version = v_obj['version'][0]
+        
+    version_1_said_calc, _ = get_blake3_256_said(sad, label, False)
+    # print(sad[label])
+    if str(version).startswith('1') :
+        return version_1_said_calc, this_version
+    
+    def pathJoin(a):
+        return '.'.join(map(str, a))
+
+    paths = mapPathsToLabel(sad, label=label)  # Map paths to the specified label
+    non_compact = deepcopy(sad)#.copy()
+    compact = deepcopy(sad)#.copy()
+    sads = {}
+    saiders = {}
+    
+
+    for path in paths:
+        parent, current = getNestedObjectAndParent(compact, path)
+
+        if parent is None or current is None:
+            continue
+
+        # Calculate SAID for the current object
+        if label in parent:
+            _sad = get_said(parent, label=label, version = version)
+        else:
+            _sad = parent
+        
+        saiders[pathJoin(path)] = _sad[0]
+        sads[pathJoin(path[:-1])] = _sad[1]
+        
+        # Update `non_compact` only at the specific field level
+        replaceNestedObject(non_compact, path, _sad[0])
+        if path == [label]:
+            if 't' in  non_compact and equal_in_list(non_compact['t'], ['icp', 'dip', 'vcp']):
+                non_compact['i'] = _sad[0]
+        
+        # For `compact`, replace the entire nested structure as per SAID path requirements
+        if len(path[:-1]) > 0:
+            replaceNestedObject(compact, path[:-1], _sad[0])
+        else:
+            compact = _sad[1]
+    # print(paths)
+    # print('-'*88)
+    # print(non_compact)
+    # print('-'*88)
+    t= 'ACDC'
+    if 'v' in non_compact:
+        if  'KERI' in non_compact['v']:
+            print("8"*88)
+            t = 'KERI'
+        else: 
+            t = "ACDC"
+
+        ## TODO replace major here with version number
+        non_compact_v = build_version(non_compact, t, kind = 'JSON', major=version, minor=0)
+        non_compact['v'] = non_compact_v
+        # print('non_compact_v', non_compact_v)
+
+        compact_v = build_version(compact, t, kind = 'JSON', major=version, minor=0)
+        # print('compact_v', compact_v)
+
+        compact['v'] = compact_v
+
+    # calc final
+    # print('compact')
+    # pp.pprint(compact)
+    final_said = compact[label]
+    # print('final_said', final_said)
+    non_compact[label] = final_said
+
+    # print('compact')
+    # pp.pprint(compact)
+    return {
+        'final_said': compact[label],
+        'version_1_said_calc': version_1_said_calc,
+        'paths': paths,
+        'sads': sads,
+        'saiders': saiders,
+        'compact': compact,
+        'non_compact': non_compact,
+        'said': compact[label],
+        'paths': paths,
+        'major_version_detected': this_version
+    }
+
+
 def get_blake3_256_said(data, label, debug=False):
     _data2 = replace_said_label(data, label)
     blake3_byte_arr = blake3_256_from_dict(_data2, debug)
@@ -459,4 +1023,4 @@ def get_blake3_256_said(data, label, debug=False):
     aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
     b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
     said = substitute_derivation_code(b64_digest, 'E', to_pad)
-    return said
+    return said, None
