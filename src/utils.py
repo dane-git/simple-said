@@ -32,248 +32,109 @@ import argparse
 import sys
 import os
 import json
-import argparse
+
+import os
+import sys
+import json
 
 
-def load_json_from_cli():
+
+import sys
+
+def parse_input_args():
     """
-    Reads JSON file paths, labels, and versions from command-line arguments and loads each file.
+    Custom argument parser for input files and their associated labels and versions.
 
     Returns:
-        list: A list of dictionaries where each entry contains metadata and the content of a JSON file.
-
-    Raises:
-        SystemExit: If the required arguments are missing or if there are errors loading any JSON file.
+        list: A list of dictionaries, each containing file information:
+              - file_name (str): The input file name.
+              - label (str or None): The associated label, if provided.
+              - version (str or None): The associated version, if provided.
     """
-    parser = argparse.ArgumentParser(description="Load JSON files and associate them with labels and versions.")
-    parser.add_argument(
-        "-i", "--input", action="append", required=True,
-        help="Specify input JSON file paths. Use -i multiple times for multiple files."
-    )
-    parser.add_argument(
-        "--label", "-d", "-l", nargs="*", action="append",
-        help="Optional labels corresponding to the input files. If not provided, inferred or set to None."
-    )
-    parser.add_argument(
-        "--version", "-v", nargs="*", action="append",
-        help="Optional versions corresponding to the input files. If not provided, inferred or set to None."
-    )
+    args = sys.argv[1:]  # Skip the script name
+    file_list = []
+    current_file = None
+    current_label = None
+    current_version = None
 
-    args = parser.parse_args()
+    i = 0
+    while i < len(args):
+        if args[i] in ["-i", "--input"]:  # New input file
+            # Save the previous file's data if available
+            if current_file:
+                file_list.append({
+                    "file_name": current_file,
+                    "label": current_label,
+                    "version": current_version,
+                })
+            # Start new input file tracking
+            current_file = args[i + 1] if i + 1 < len(args) else None
+            current_label = None
+            current_version = None
+            i += 1  # Skip to the next argument
+        elif args[i] in ["-d", "--label"]:  # Label for the current input file
+            current_label = args[i + 1] if i + 1 < len(args) else None
+            i += 1  # Skip to the next argument
+        elif args[i] in ["-v", "--version"]:  # Version for the current input file
+            current_version = args[i + 1] if i + 1 < len(args) else None
+            i += 1  # Skip to the next argument
+        i += 1
 
-    # Flatten input files
-    # print('args.input ' , args.input )
-
-    # input_files = [file for sublist in args.input for file in sublist]
-    input_files = args.input
-    # print(input_files)
-
-    # Handle mismatched input counts
-    if args.label and len(args.label) > len(input_files):
-        print("Error: More labels than input files provided.")
-        sys.exit(1)
-    if args.version and len(args.version) > len(input_files):
-        print("Error: More versions than input files provided.")
-        sys.exit(1)
-
-    # Extend missing labels and versions with None
-    labels = (args.label or []) + [None] * (len(input_files) - len(args.label or []))
-    versions = (args.version or []) + [None] * (len(input_files) - len(args.version or []))
-    print('versions',  versions)
-
+    # Save the last file's data if available
+    if current_file:
+        file_list.append({
+            "file_name": current_file,
+            "label": current_label,
+            "version": current_version,
+        })
     data_list = []
-
-    for idx, file_path in enumerate(input_files):
-        file_name = os.path.splitext(os.path.basename(file_path))[0]
-        label = labels[idx]
-        version = versions[idx]
-        print('file_name', file_name)
-        print(file_path)
+    # print(95)
+    # print(file_list)
+    for idx in range(len(file_list)):
         try:
-            with open(file_path, "r") as file:
+            f = os.path.basename(file_list[idx]['file_name'])
+            # print(101,f)
+            
+            with open(file_list[idx]['file_name'], "r") as file:
                 json_data = json.load(file)
+                print(97, json_data.get("v"))
+                label = file_list[idx]['label']
+                version = file_list[idx]['version']
+                
 
-                # Infer label if not provided
+                # Infer label if not explicitly provided
                 if label is None:
                     if "d" in json_data:
                         label = "d"
                     elif "$id" in json_data:
                         label = "$id"
-                    else:
-                        label = None  # Set explicitly to None if not inferable
 
-                # Infer version if not provided
+                # Infer version if not explicitly provided
                 if version is None:
-                    if "v" in json_data:
-                        version = determine_keri_version(dict_to_said_str(json_data))
-                        # version = json_data["version"]
-                    else:
-                        version = None  # Set explicitly to None if not inferable
+                    version = json_data.get("v")
+                    if version is not None:
+                        version= determine_keri_version(dict_to_keri_byte_str(json_data))
 
                 data_list.append(
                     {
-                        "file_path": file_path,
-                        "file_name": file_name,
+                        "file_path": f,
+                        "file_name": os.path.basename(f),
                         "label": label,
                         "version": version,
                         "data": json_data,
                     }
                 )
         except FileNotFoundError:
-            print(f"Error: The file '{file_path}' was not found.")
+            print(f"Error: The file '{f}' was not found.")
             sys.exit(1)
         except json.JSONDecodeError:
-            print(f"Error: The file '{file_path}' is not valid JSON.")
+            print(f"Error: The file '{f}' is not valid JSON.")
             sys.exit(1)
 
     return data_list
 
 
-if __name__ == "__main__":
-    loaded_data = load_json_from_cli()
-    print("Loaded Data:")
-    for entry in loaded_data:
-        print(entry)
 
-
-# def load_json_from_cli():
-#     """
-#     Reads JSON file paths and labels from command-line arguments and loads each file.
-
-#     Returns:
-#         dict: A dictionary where each label maps to the contents of the corresponding JSON file.
-
-#     Raises:
-#         SystemExit: If the required arguments are missing or if there are errors loading any JSON file.
-#     """
-#     parser = argparse.ArgumentParser(description="Load JSON files and associate them with labels.")
-#     parser.add_argument(
-#         "-i",
-#         "--input",
-#         nargs="+",
-#         action='append',
-#         required=True,
-#         help="List of input JSON file paths. Provide space-separated file paths.",
-#     )
-#     parser.add_argument(
-#         "--label", "-d", "-l", nargs="+", help="Optional labels corresponding to the input files.",
-#         action='append'
-#     )
-#     parser.add_argument("--version", "-v",  nargs="+" , action='append',
-#                         # action="store_true", 
-#                         help="Display version information.")
-
-#     args = parser.parse_args()
-#     input_files = [file for sublist in args.input for file in sublist]
-
-#     # Show version and exit if requested
-#     # if args.version:
-#     #     print("Version 1.0.0")
-#     #     sys.exit(0)
-
-#     if not args.input:
-#         print("Error: No input files provided.")
-#         sys.exit(1)
-
-#     if args.label and len(args.label) != len(args.input):
-#         print("Error: Number of labels must match the number of input files.")
-#         sys.exit(1)
-
-#     data_list = []
-
-#     for idx, file_path in enumerate(input_files):
-#         print('idx', idx)
-#         file_name = os.path.splitext(os.path.basename(file_path))[0]
-#         label = args.label[idx] if args.label else None
-#         version = args.label[idx] if args.label else None
-
-#         try:
-#             with open(file_path, "r") as file:
-#                 json_data = json.load(file)
-                
-#                 # If no label is provided, infer it from the file's data
-#                 if not label:
-#                     if "d" in json_data:
-#                         label = "d"
-#                     elif "$id" in json_data:
-#                         label = "$id"
-#                     else:
-#                         print(f"Error: Unable to infer label for file '{file_path}'.")
-#                         sys.exit(1)
-#                 if version is None:
-#                     version = determine_keri_version(dict_to_said_str(json_data))
-#                 data_list.append(
-#                     {
-#                         "file_path": file_path,
-#                         "file_name": file_name,
-#                         "label": label,
-#                         "data": json_data,
-#                         'version': version
-#                     }
-#                 )
-#         except FileNotFoundError:
-#             print(f"Error: The file '{file_path}' was not found.")
-#             sys.exit(1)
-#         except json.JSONDecodeError:
-#             print(f"Error: The file '{file_path}' is not valid JSON.")
-#             sys.exit(1)
-
-#     return data_list
-
-
-# if __name__ == "__main__":
-#     loaded_data = load_json_from_cli()
-#     print("Loaded Data:")
-#     for entry in loaded_data:
-#         print(entry)
-
-
-# def load_json_from_cli():
-#     """
-#     Reads JSON file paths and labels from command-line arguments and loads each file.
-
-#     Returns:
-#         dict: A dictionary where each label maps to the contents of the corresponding JSON file.
-
-#     Raises:
-#         SystemExit: If the required arguments are missing or if there are errors loading any JSON file.
-#     """
-#     # Ensure there’s an even number of arguments (each file has a path and a label)
-#     if (len(sys.argv) - 1) % 2 != 0:
-#         print("Usage: python main.py <path1> <label1> <path2> <label2> ...")
-#         sys.exit(1)
-
-#     _data = []
-
-#     # Iterate over arguments in pairs (path and label)
-
-#     for i in range(1, len(sys.argv), 2):
-#         data = {}
-#         file_path = sys.argv[i]
-#         file_name = os.path.splitext(os.path.basename(file_path))[0]
-#         # print(i)
-#         # print(file_path)
-#         label = sys.argv[i + 1]
-#         # print(label)
-#         # Load JSON data for the given file path
-#         try:
-#             with open(file_path, 'r') as file:
-#                 o = {'file_path': file_path,
-#                      'file_name': file_name,
-#                      'label': label,
-#                      'data': {}}
-#                 d = json.load(file)
-
-#                 o['data'] = d
-#                 _data.append(o)
-#         except FileNotFoundError:
-#             print(f"Error: The file '{file_path}' was not found.")
-#             sys.exit(1)
-#         except json.JSONDecodeError:
-#             print(f"Error: The file '{file_path}' is not valid JSON.")
-#             sys.exit(1)
-
-#     return _data
 
 def center_text(text, n, pad_char=' '):
     """
@@ -661,9 +522,11 @@ def get_version_string_info(v_string, version=1):
             raise ValueError(f"Unrecognized version: '{version}'. {v_string}")
     if version == 1:
         stop_delim = v_string.index('_')
-
+        major = int(v_string[4], 16)
+        minor = int(v_string[5], 16)
+        
         _protocol = v_string[0:4]
-        _version = v_string[4:6]
+        _version = str(major) + '.' + str(minor)
         _kind = v_string[6:10]
         _size = v_string[10:stop_delim]
         _size_length =int(_size, 16)
@@ -671,9 +534,12 @@ def get_version_string_info(v_string, version=1):
 
     elif version == 2:
         stop_delim = v_string.index('.')
-
+        minorv = 0
+        for c in v_string[5:7]:
+            minorv += value_of(c)
+        
         _protocol = v_string[0:4]
-        _version = '.'.join(str(value_of(c)) for c in v_string[4:7])
+        _version = str(value_of(v_string[4])) + '.' + str(minorv)
         _kind = v_string[7:11]
         _size = v_string[11:stop_delim]
         _size_length =b64_to_int(_size)
@@ -689,15 +555,29 @@ def get_version_string_info(v_string, version=1):
 def is_dict(obj):
     return isinstance(obj, dict)
 
+def set_v_field_length(data: dict, major):
+    len_data = deepcopy(data)
+    if major == 1:
+        len_data['v'] = '#'*17
+    elif major == 2:
+        len_data['v'] = '#'*16
+    return len(dict_to_said_str(len_data))
+
 def build_version(data, protocol, kind = 'JSON', major=1, minor=0):
+    length = None
     if not is_bytes(data) and not is_string(data) and is_dict(data):
-        _data = dict_to_said_str(data)
+        length = set_v_field_length(data, major)
+        
     elif is_bytes(data):
-        _data = data
+        data = data.decode('utf-8')
+        data = json.load(data)
+        length = set_v_field_length(data, major)
+        
     elif is_string(data):
-        _data = data.encode()
+        data = json.load(data)
+        length = set_v_field_length(data, major)
     
-    length = len(_data)
+    
 
     if len(protocol) != 4:
         raise ValueError(f"protocol must be 4 characters: {protocol}: {len(protocol)}")
@@ -877,13 +757,11 @@ def equal_in_list(e, _list):
 
 def get_said(data, label='d', version=None, ):
     d2 = replace_said_label(data, label)
-    vFirstFlag = False
-    # print(d2)
-    if 't' in  d2 and equal_in_list(d2['t'], ['icp', 'dip', 'vcp']):
+    if is_dict(d2) and  't' in  d2 and equal_in_list(d2['t'], ['icp', 'dip', 'vcp']):
         d2 =  replace_said_label(d2, 'i')
 
     ## calc and get version string if there
-    if 'v' in data and vIsFirst(data):
+    if is_dict(d2) and 'v' in data and vIsFirst(data):
         data_byte_str = dict_to_said_str(data)
         if version == None:
             version = determine_keri_version(data_byte_str)
@@ -895,7 +773,8 @@ def get_said(data, label='d', version=None, ):
         d2['v'] = v_field
         
 
-
+    if not is_dict(d2):
+        print(777, d2)
     blake3_byte_arr = blake3_256_from_dict(d2)
     to_pad = calc_pad_bits(blake3_byte_arr, 24)
     aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
@@ -909,7 +788,7 @@ def get_said(data, label='d', version=None, ):
         
     return said, d2, said==data[label]
 
-def saidify(sad, label='d', version= -1):
+def saidify(sad, label='d', version= -1, compactify=False):
     """
     Calculates and injects SAID values for specified paths within a nested dictionary (SAD) structure.
     Produces both compacted and non-compacted versions of the SAD.
@@ -924,15 +803,16 @@ def saidify(sad, label='d', version= -1):
     Returns:
         dict: Contains 'paths', 'sads', 'saiders', 'compact', and 'non_compact' versions of the SAD.
     """
-    # print('version', version)
     this_version = -1
     if 'v' in sad:
         v_obj = get_version_string_info(sad['v'], -1)
+       
         this_version = v_obj['version'][0]
+        if version == -1:
+            version = int(this_version)
         
     version_1_said_calc, _ = get_blake3_256_said(sad, label, False)
-    # print(sad[label])
-    if str(version).startswith('1') :
+    if str(version).startswith('1') and compactify == False:
         return version_1_said_calc, this_version
     
     def pathJoin(a):
@@ -971,10 +851,7 @@ def saidify(sad, label='d', version= -1):
             replaceNestedObject(compact, path[:-1], _sad[0])
         else:
             compact = _sad[1]
-    # print(paths)
-    # print('-'*88)
-    # print(non_compact)
-    # print('-'*88)
+
     t= 'ACDC'
     if 'v' in non_compact:
         if  'KERI' in non_compact['v']:
@@ -986,22 +863,17 @@ def saidify(sad, label='d', version= -1):
         ## TODO replace major here with version number
         non_compact_v = build_version(non_compact, t, kind = 'JSON', major=version, minor=0)
         non_compact['v'] = non_compact_v
-        # print('non_compact_v', non_compact_v)
 
         compact_v = build_version(compact, t, kind = 'JSON', major=version, minor=0)
-        # print('compact_v', compact_v)
 
         compact['v'] = compact_v
 
-    # calc final
-    # print('compact')
-    # pp.pprint(compact)
+    compact_said, _, _ = get_said(compact, label=label)
+    compact[label] = compact_said
     final_said = compact[label]
-    # print('final_said', final_said)
+
     non_compact[label] = final_said
 
-    # print('compact')
-    # pp.pprint(compact)
     return {
         'final_said': compact[label],
         'version_1_said_calc': version_1_said_calc,
@@ -1015,9 +887,22 @@ def saidify(sad, label='d', version= -1):
         'major_version_detected': this_version
     }
 
-
+# determine_keri_version(stream)
 def get_blake3_256_said(data, label, debug=False):
     _data2 = replace_said_label(data, label)
+
+    if 'v' in data and vIsFirst(data):
+        major = determine_keri_version(dict_to_keri_byte_str(data))
+        v_info = get_version_string_info(data['v'], major)
+        
+        v_string = build_version(
+            data, v_info['protocol'], 
+            v_info['kind'], 
+            major=major, 
+            minor=int(''.join(v_info['version'].split('.')[1:]))
+        )
+        _data2['v'] = v_string
+             
     blake3_byte_arr = blake3_256_from_dict(_data2, debug)
     to_pad = calc_pad_bits(blake3_byte_arr,24)
     aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
