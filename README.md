@@ -11,14 +11,9 @@ Simply to attempt to understand the specification and it's implementation.
 
 
 ## Example usage
-`python main.py ../tests/acdcs/ecr-authorization-vlei-credential.json d ../tests/schemas/ecr-authorization-vlei-credential.json \$id`
-
-or for tests in tests/
-
-`python test_main.py`
+`python main.py -i ../tests/acdcs/ecr-authorization-vlei-credential_e.json  -i ../tests/acdcs/ecr-authorization-vlei-credential.json -v 2  -i ../tests/schemas/qualified-vLEI-issuer-vLEI-credential.json  -v 2`
 
 
-`python main.py ../tests/acdcs/ecr-authorization-vlei-credential_e.json d ../tests/acdcs/ecr-authorization-vlei-credential.json d`
 
 
 ## Test Data
