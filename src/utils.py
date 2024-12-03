@@ -755,7 +755,9 @@ def equal_in_list(e, _list):
             return True
     return False
 
-def get_said(data, label='d', version=None, ):
+
+## Simple version full said.  no recursion
+def get_said(data, label='d', version=None ):
     d2 = replace_said_label(data, label)
     if is_dict(d2) and  't' in  d2 and equal_in_list(d2['t'], ['icp', 'dip', 'vcp']):
         d2 =  replace_said_label(d2, 'i')
@@ -773,8 +775,6 @@ def get_said(data, label='d', version=None, ):
         d2['v'] = v_field
         
 
-    if not is_dict(d2):
-        print(777, d2)
     blake3_byte_arr = blake3_256_from_dict(d2)
     to_pad = calc_pad_bits(blake3_byte_arr, 24)
     aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
@@ -887,23 +887,26 @@ def saidify(sad, label='d', version= -1, compactify=False):
         'major_version_detected': this_version
     }
 
-# determine_keri_version(stream)
-def get_blake3_256_said(data, label, debug=False):
-    _data2 = replace_said_label(data, label)
-
+def build_version_string(data, major = None):
     if 'v' in data and vIsFirst(data):
-        major = determine_keri_version(dict_to_keri_byte_str(data))
+        if major is None:
+            major = determine_keri_version(dict_to_keri_byte_str(data))
         v_info = get_version_string_info(data['v'], major)
         
-        v_string = build_version(
+        return build_version(
             data, v_info['protocol'], 
             v_info['kind'], 
             major=major, 
             minor=int(''.join(v_info['version'].split('.')[1:]))
         )
-        _data2['v'] = v_string
-             
-    blake3_byte_arr = blake3_256_from_dict(_data2, debug)
+    return None
+# determine_keri_version(stream)
+def get_blake3_256_said(data, label, debug=False):
+    data_2 = replace_said_label(data, label)
+    v_string = build_version_string(data)
+    if v_string is not None:
+        data_2['v'] = v_string
+    blake3_byte_arr = blake3_256_from_dict(data_2, debug)
     to_pad = calc_pad_bits(blake3_byte_arr,24)
     aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
     b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
