@@ -912,3 +912,98 @@ def get_blake3_256_said(data, label, debug=False):
     b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
     said = substitute_derivation_code(b64_digest, 'E', to_pad)
     return said, None
+
+def update_v2string_length(ked):
+    _raw = dict_to_keri_byte_str(ked)
+    _size = len(_raw)
+    size_b64 = int_to_b64(_size)
+    ## SANITY CHECK
+    size_from_b64 = b64_to_int(size_b64)
+    # print(f'byte size: {_size} \t\tsize_b64: {size_b64}, {size_from_b64 == _size}')
+    assert (size_from_b64 == _size)
+    ## update v string:
+    v_string = ked['v'][:-5] + size_b64 + '.'
+    return v_string
+
+def update_v1string_length(ked):
+    _raw = dict_to_keri_byte_str(ked)
+    _size = len(_raw)
+    size = f"{_size:06x}"
+    v_string = ked['v']
+    print(v_string)
+    v_string = v_string[:10] + size + '_'
+    return v_string
+
+# = SIMPLE DECOMPACTIFY ( iterative ) =======
+
+## construct a partial, given a list of paths and all the compact sads.
+def contruct_partial(paths, sads):
+    # GET ROOT KED ( COMAPCITIFED ) 
+    for sad in sads:
+        if sad.path == [sad.label]:
+            root_ked = deepcopy(sad.ked)
+
+    # sort from shortest to longest, just because
+    paths = sorted(paths, key=len)
+    for path in paths:
+        root_ked = simple_decompactify(path, sads, root_ked)
+    return root_ked
+    
+def vIsFirst(data, key='v'):
+    if not isinstance(data, dict):
+        raise ValueError("Input data must be a dictionary.")
+    
+    keys = list(data.keys())
+    return keys[0] == key if keys else False
+    
+def simple_decompactify(path, all_sads, root_ked = {}):
+    """
+    Rebuilds a nested structure recursively by adding compactified versions
+    of SADs along the specified path.
+
+    Parameters:
+        path (list): The path to decompactify to.
+        all_sads (list): A list of Sadder instances.
+        root_ked (dict): the root ked to build on top of. default will fill to the compact ked
+    Returns:
+        dict: The modified root object with the specified path decompactified.
+    """    
+    if root_ked == {}:
+        for sad in all_sads:
+            if [sad.label] == sad.path:
+                rk = deepcopy(sad.ked)
+                root_ked = deepcopy(rk)
+    match_path = []
+    for key in path:
+        # go to current spot
+        match_path.append(key)
+        if key == all_sads[0].label:
+            if vIsFirst(root_ked):
+                v_version = 1 if root_ked['v'].endswith('_') else 2
+                if v_version == 1:
+                    root_ked['v'] = update_v1string_length(root_ked)
+                    
+                else:
+                    root_ked['v']  = update_v2string_length(root_ked)
+            return root_ked
+        current_obj = root_ked
+        for p in match_path:
+            if p in current_obj:
+                if isinstance(current_obj[p], (dict, list)):
+                    current_obj  = current_obj[p]
+                    continue
+                else:
+                    ## find sad that matches:
+                    for sad in all_sads:
+                        if sad.path[:-1] ==  match_path:
+                           current_obj[p] = deepcopy(sad.ked)
+                    continue
+            else:
+                print(p, match_path)
+                for sad in all_sads:
+                    if sad.path[:-1] ==  match_path:
+                        current_obj[p] = deepcopy(sad.ked)
+                        break
+    if vIsFirst(root_ked):
+        root_ked['v']  = update_v2string_length(root_ked)
+    return root_ked                            
