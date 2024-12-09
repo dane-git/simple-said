@@ -18,11 +18,11 @@ setup(
         "setuptools==75.1.0",
         "wheel==0.44.0"
     ],
-    entry_points={
-        "console_scripts": [
-            "your-cli=simple_said.main:main",  
-        ],
-    },
+    # entry_points={
+    #     "console_scripts": [
+    #         "your-cli=simple_said.main:main",  
+    #     ],
+    # },
     classifiers=[
         "Programming Language :: Python :: 3.12",  
         "License :: OSI Approved :: MIT License",

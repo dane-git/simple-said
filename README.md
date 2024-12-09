@@ -12,9 +12,18 @@ Simply to attempt to understand the specification and it's implementation.
 - Compact/Non-Compact Representations: Process SADs into compact or non-compact forms, supporting flexible data management.  
 - Partial Decompaction: Reveal specific parts of a compacted SAD structure selectively, preserving privacy for other components.  
 
+## **Installation**
 
+To install the library:
+
+```bash
+git clone https://github.com/dane-git/simple-said.git
+cd simple-said
+pip install .
+```
+<!-- TODO
 ## CLI Example usage
-`python main.py -i ../tests/acdcs/ecr-authorization-vlei-credential_e.json  -i ../tests/acdcs/ecr-authorization-vlei-credential.json -v 2  -i ../tests/schemas/qualified-vLEI-issuer-vLEI-credential.json  -v 2`
+`python main.py -i ../tests/acdcs/ecr-authorization-vlei-credential_e.json  -i ../tests/acdcs/ecr-authorization-vlei-credential.json -v 2  -i ../tests/schemas/qualified-vLEI-issuer-vLEI-credential.json  -v 2` -->
 
 
 ### 1\. **`saidify`**
@@ -70,7 +79,7 @@ get_said(data, label='d', version=None)
 **Returns**: A tuple:
 
 - `said`: The calculated SAID.
-- `d2`: The updated data structure.
+- `sad`: The updated data structure.
 - `is_unchanged`: Whether the calculated SAID matches the existing value.
 
 **Notes**:
@@ -96,28 +105,159 @@ construct_partial(paths, sads, label)
 
 **Returns**: A partially decompacted SAD with revealed content for the specified paths. (pass in all the paths for a fully decompacted SAD)
 
-#### Example:
+## Example:
+- First get the results from saidify
+
+#### Original non compactified
+```python
+from simple_said import saidify
+
+example = { 
+  'v': 'ACDCCAAJSONAAVE.',
+  'd': 'EEc0llA5ATA0LqgD3NacFddX0P_Q8has1CW5yKtYsFq5',
+  'i': 'did:keri:EmkPreYpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPM',
+  's': 'EGGeIZ8a8FWS7a646jrVPTzlSkUPqs4reAXRZOkogZ2A',
+  'a': { 'd': 'EFQF1FMPvppOYH5mREvhtpeVIOyIA5qUR8yoDXlPjdrr',
+         'i': 'did:keri:EpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPmkPreYA',
+         'date': '2022-08-22T17:50:09.988921+00:00',
+         'place': { 'd': 'EFe4t4vP0C7e-tThgEy3HxyDRa62p9oTDxGJkqjkbfK8',
+                    'u': '0A8xHxiskgz5jJ8ZYtEfnBt_',
+                    'a': 'GoodFood Restaurant, 953 East Sheridan Ave, Cody WY '
+                         '82414 USA'}},
+  'e': { 'd': 'ELklZ5xoxJV9w2mEantpo58a76OMp5Cby2S0gk2gU41F',
+         'other': { 'd': 'ENZyhiv9penkbqBqblRpBYTznwf3h84uHh93s_e77A7t',
+                    'n': 'EIl3MORH3dCdoFOLe71iheqcywJcnjtJtQIYPvAu6DZA'}},
+  'r': { 'd': 'EGP6QI5LL1X9unCUymIwtQRjp9p4r_loUgKdymVpn_VG',
+         'Assimilation': { 'd': 'EBRRwxQlC6b57S_7mnH-p51N3lUcgO8AAcQrgl_FTuPo',
+                           'l': 'Issuee hereby explicitly and unambiguously '
+                                'agrees to NOT assimilate, aggregate, '
+                                'correlate, or otherwise use in combination '
+                                'with other information available to the '
+                                'Issuee, the information, in whole or in part, '
+                                'referenced by this container or any '
+                                'containers recursively referenced by the edge '
+                                'section, for any purpose other than that '
+                                'expressly permitted by the Purpose clause.'},
+         'Purpose': { 'd': 'EOF9OZMZudCRFDU_AmJWY7Py3KdazRsGnbEz-QIQ7HJj',
+                      'l': 'One-time admittance of Issuer by Issuee to eat at '
+                           'place on date as specified in Attribute section.'}
+        }
+}
+
+saidified = saidify.saidify(example)
+```
+### PARTIAL Disclosures:
 ```python
 to_reveal = [['e'], ['r', 'Purpose']]
 partial = construct_partial(to_reveal, saidified['sads'], saidified['label'])
-
 ```
-#### Result
+### Parial Result Example
+
+
+#### Partial reveal 1
 ```python
-{
-  'v': 'ACDC10JSON00AAJ9.',
-  'd': 'EBtlmHmvTAaT4Fk7OOLz8Lbj0-RRk-CcuAWJqqcM8zUW',
-  'i': 'did:keri:EmkPreYpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPM',
-  'e': { 'd': 'ELklZ5xoxJV9w2mEantpo58a76OMp5Cby2S0gk2gU41F',
-         'other': 'ENZyhiv9penkbqBqblRpBYTznwf3h84uHh93s_e77A7t'},
-  'r': { 'd': 'EGP6QI5LL1X9unCUymIwtQRjp9p4r_loUgKdymVpn_VG',
-         'Purpose': { 'd': 'EOF9OZMZudCRFDU_AmJWY7Py3KdazRsGnbEz-QIQ7HJj',
-                      'l': 'One-time admittance of Issuer by Issuee to eat '
-                           'at place on date as specified in Attribute '
-                           'section.'}}
-}
-
+to_reveal = [['r','Assimilation'], ['r', 'Purpose']]
+partial_1 = saidify.construct_partial(to_reveal, saidified ['sads'], saidified ['label'])
+pp.pprint(partial_1)
 ```
+output:
+```python
+{ 'v': 'ACDCCAAJSONAAPC.',
+  'd': 'EEc0llA5ATA0LqgD3NacFddX0P_Q8has1CW5yKtYsFq5',
+  'i': 'did:keri:EmkPreYpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPM',
+  's': 'EGGeIZ8a8FWS7a646jrVPTzlSkUPqs4reAXRZOkogZ2A',
+  'a': 'EFQF1FMPvppOYH5mREvhtpeVIOyIA5qUR8yoDXlPjdrr',
+  'e': 'ELklZ5xoxJV9w2mEantpo58a76OMp5Cby2S0gk2gU41F',
+  'r': { 'd': 'EGP6QI5LL1X9unCUymIwtQRjp9p4r_loUgKdymVpn_VG',
+         'Assimilation': { 'd': 'EBRRwxQlC6b57S_7mnH-p51N3lUcgO8AAcQrgl_FTuPo',
+                           'l': 'Issuee hereby explicitly and unambiguously '
+                                'agrees to NOT assimilate, aggregate, '
+                                'correlate, or otherwise use in combination '
+                                'with other information available to the '
+                                'Issuee, the information, in whole or in part, '
+                                'referenced by this container or any '
+                                'containers recursively referenced by the edge '
+                                'section, for any purpose other than that '
+                                'expressly permitted by the Purpose clause.'},
+         'Purpose': { 'd': 'EOF9OZMZudCRFDU_AmJWY7Py3KdazRsGnbEz-QIQ7HJj',
+                      'l': 'One-time admittance of Issuer by Issuee to eat at '
+                           'place on date as specified in Attribute section.'}
+        }
+}
+```
+#### Partial reveal 2
+```python
+to_reveal = [['r','Assimilation'], ['r', 'Purpose'], ['a']]
+partial_2 = saidify.construct_partial(to_reveal, saidified ['sads'], saidified ['label'])
+pp.pprint(partial_2)
+```
+output:
+```python
+{ 'v': 'ACDCCAAJSONAARl.',
+  'd': 'EEc0llA5ATA0LqgD3NacFddX0P_Q8has1CW5yKtYsFq5',
+  'i': 'did:keri:EmkPreYpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPM',
+  's': 'EGGeIZ8a8FWS7a646jrVPTzlSkUPqs4reAXRZOkogZ2A',
+  'a': { 'd': 'EFQF1FMPvppOYH5mREvhtpeVIOyIA5qUR8yoDXlPjdrr',
+         'i': 'did:keri:EpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPmkPreYA',
+         'date': '2022-08-22T17:50:09.988921+00:00',
+         'place': 'EFe4t4vP0C7e-tThgEy3HxyDRa62p9oTDxGJkqjkbfK8'},
+  'e': 'ELklZ5xoxJV9w2mEantpo58a76OMp5Cby2S0gk2gU41F',
+  'r': { 'd': 'EGP6QI5LL1X9unCUymIwtQRjp9p4r_loUgKdymVpn_VG',
+         'Assimilation': { 'd': 'EBRRwxQlC6b57S_7mnH-p51N3lUcgO8AAcQrgl_FTuPo',
+                           'l': 'Issuee hereby explicitly and unambiguously '
+                                'agrees to NOT assimilate, aggregate, '
+                                'correlate, or otherwise use in combination '
+                                'with other information available to the '
+                                'Issuee, the information, in whole or in part, '
+                                'referenced by this container or any '
+                                'containers recursively referenced by the edge '
+                                'section, for any purpose other than that '
+                                'expressly permitted by the Purpose clause.'},
+         'Purpose': { 'd': 'EOF9OZMZudCRFDU_AmJWY7Py3KdazRsGnbEz-QIQ7HJj',
+                      'l': 'One-time admittance of Issuer by Issuee to eat at '
+                           'place on date as specified in Attribute section.'}
+        }
+}
+```
+
+#### Partial reveal 3
+```python
+to_reveal = [['r','Assimilation'], ['r', 'Purpose'], ['a', 'place']]
+partial_3 = saidify.construct_partial(to_reveal, saidified ['sads'], saidified ['label'])
+pp.pprint(partial_3)
+```
+output:
+```python
+{ 'v': 'ACDCCAAJSONAATO.',
+  'd': 'EEc0llA5ATA0LqgD3NacFddX0P_Q8has1CW5yKtYsFq5',
+  'i': 'did:keri:EmkPreYpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPM',
+  's': 'EGGeIZ8a8FWS7a646jrVPTzlSkUPqs4reAXRZOkogZ2A',
+  'a': { 'd': 'EFQF1FMPvppOYH5mREvhtpeVIOyIA5qUR8yoDXlPjdrr',
+         'i': 'did:keri:EpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPmkPreYA',
+         'date': '2022-08-22T17:50:09.988921+00:00',
+         'place': { 'd': 'EFe4t4vP0C7e-tThgEy3HxyDRa62p9oTDxGJkqjkbfK8',
+                    'u': '0A8xHxiskgz5jJ8ZYtEfnBt_',
+                    'a': 'GoodFood Restaurant, 953 East Sheridan Ave, Cody WY '
+                         '82414 USA'}},
+  'e': 'ELklZ5xoxJV9w2mEantpo58a76OMp5Cby2S0gk2gU41F',
+  'r': { 'd': 'EGP6QI5LL1X9unCUymIwtQRjp9p4r_loUgKdymVpn_VG',
+         'Assimilation': { 'd': 'EBRRwxQlC6b57S_7mnH-p51N3lUcgO8AAcQrgl_FTuPo',
+                           'l': 'Issuee hereby explicitly and unambiguously '
+                                'agrees to NOT assimilate, aggregate, '
+                                'correlate, or otherwise use in combination '
+                                'with other information available to the '
+                                'Issuee, the information, in whole or in part, '
+                                'referenced by this container or any '
+                                'containers recursively referenced by the edge '
+                                'section, for any purpose other than that '
+                                'expressly permitted by the Purpose clause.'},
+         'Purpose': { 'd': 'EOF9OZMZudCRFDU_AmJWY7Py3KdazRsGnbEz-QIQ7HJj',
+                      'l': 'One-time admittance of Issuer by Issuee to eat at '
+                           'place on date as specified in Attribute section.'}
+        }
+}
+```
+
 
 
 
