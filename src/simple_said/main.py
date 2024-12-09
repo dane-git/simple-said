@@ -1,4 +1,4 @@
-import utils
+import saidify
 import pprint
 pp = pprint.PrettyPrinter(indent=2, sort_dicts=False)
 
@@ -7,9 +7,8 @@ pp = pprint.PrettyPrinter(indent=2, sort_dicts=False)
 if __name__ == "__main__":
     # Check if a file path is provided
     # data = utils.load_json_from_cli()
-    args = utils.parse_input_args()
+    args = saidify.parse_input_args()
 
-    print("args")
     # print(args)
     data = []
     # print(data)
@@ -17,31 +16,30 @@ if __name__ == "__main__":
     #     print(d)
     
     compactify = False
-    print()
+
     ## check said of each
     for c in args:
-        print(c.keys())
-        print('fn', c['file_name'])
-        print('label', c['label'])
-        print('verison', c['version'])
+        # print(c.keys())
+        # print('fn', c['file_name'])
+        # print('label', c['label'])
+        # print('verison', c['version'])
         # continue
 
         label = c['label']
         _data = c['data']
         version = int(c['version'])
-        print(version)
+
         said_value = _data[label]
         # said = utils.get_blake3_256_said(_data, label, True)
         if str(version).startswith == '2':
             compactify = True
-        said  = utils.saidify(_data, label, version, compactify=compactify)
+        said  = saidify.saidify(_data, label, version, compactify=compactify)
         print('*'*88) 
-        print(utils.center_text(' '+ c['file_path']+' ', 88,'-'))
+        print(saidify.center_text(' '+ c['file_path']+' ', 88,'-'))
         print('calc said:\t', said,)
         print('data said:\t',  _data[label])
         print('match:\t\t', said == _data[label])
         # pp.pprint(_)
-
 
 
 

@@ -1,13 +1,14 @@
 import json
 import blake3
 import base64
-
 import datetime
 import sys
-import os
 import re
 import shutil
 import pprint
+import os
+
+
 pp = pprint.PrettyPrinter(indent=2, sort_dicts=False)
 def load_json_from_file(file_path):
     """
@@ -23,23 +24,7 @@ def load_json_from_file(file_path):
         data = json.load(file)
     return data
 
-import sys
-import os
-import json
-import argparse
 
-
-import sys
-import os
-import json
-
-import os
-import sys
-import json
-
-
-
-import sys
 
 def parse_input_args():
     """
@@ -758,69 +743,137 @@ def equal_in_list(e, _list):
 
 ## Simple version full said.  no recursion
 def get_said(data, label='d', version=None ):
-    d2 = replace_said_label(data, label)
-    if is_dict(d2) and  't' in  d2 and equal_in_list(d2['t'], ['icp', 'dip', 'vcp']):
-        d2 =  replace_said_label(d2, 'i')
+    """
+    Calculate the Self-Addressing Identifier (SAID) for a given data structure.
+
+    This function generates a SAID using the BLAKE3 hash of the provided data. It replaces
+    specific labels in the data structure for processing and applies appropriate derivation
+    codes. For certain message types (`icp`, `dip`, `vcp`), it ensures the identifier (`i`)
+    field is also updated with the calculated SAID.
+
+    Parameters:
+    ----------
+    data : dict
+        The data structure for which the SAID is calculated.
+    label : str, optional
+        The field name in the data where the SAID is stored. Defaults to 'd'.
+    version : str, optional
+        Version string to use when constructing the SAID. If None, it will be determined
+        automatically.
+
+    Returns:
+    -------
+    tuple:
+        - said (str): The calculated SAID as a base64-encoded string.
+        - d2 (dict): The updated data structure with the SAID included.
+        - is_unchanged (bool): Whether the calculated SAID matches the existing value 
+          under the specified label in the original data.
+
+    Notes:
+    -----
+    - For messages of type `icp`, `dip`, or `vcp`, the SAID is applied to the `i` field
+      in addition to the specified label.
+    - The function handles optional version information, constructing a version field 
+      based on the protocol (`KERI` or `ACDC`) and the detected or supplied version.
+    """
+    sad = replace_said_label(data, label)
+    if is_dict(sad) and  't' in  sad and equal_in_list(sad['t'], ['icp', 'dip', 'vcp']):
+        sad =  replace_said_label(sad, 'i')
 
     ## calc and get version string if there
-    if is_dict(d2) and 'v' in data and vIsFirst(data):
+    if is_dict(sad) and 'v' in data and vIsFirst(data):
         data_byte_str = dict_to_said_str(data)
         if version == None:
             version = determine_keri_version(data_byte_str)
-        if d2['v'].startswith('ACDC'):
+        if sad['v'].startswith('ACDC'):
             proto_string = 'ACDC'
         else:
             proto_string = 'KERI'
         v_field = build_version(data, proto_string, 'JSON', version, 0)
-        d2['v'] = v_field
+        sad['v'] = v_field
         
 
-    blake3_byte_arr = blake3_256_from_dict(d2)
+    blake3_byte_arr = blake3_256_from_dict(sad)
     to_pad = calc_pad_bits(blake3_byte_arr, 24)
     aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
     b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
     said = substitute_derivation_code(b64_digest, 'E', to_pad)
     
-    d2[label] = said
+    sad[label] = said
     ## REPLACE 'i' on icp, dip, vcp
-    if 't' in  d2 and equal_in_list(d2['t'], ['icp', 'dip', 'vcp']):
-        d2['i'] = said
+    if 't' in  sad and equal_in_list(sad['t'], ['icp', 'dip', 'vcp']):
+        sad['i'] = said
         
-    return said, d2, said==data[label]
+    return said, sad, said==data[label]
 
 def saidify(sad, label='d', version= -1, compactify=False):
     """
-    Calculates and injects SAID values for specified paths within a nested dictionary (SAD) structure.
-    Produces both compacted and non-compacted versions of the SAD.
+    Process a Self-Addressing Data (SAD) structure to calculate and integrate SAIDs.
+
+    This function takes a SAD structure and processes it recursively to calculate 
+    Self-Addressing Identifiers (SAIDs) for nested components, producing both compact 
+    and non-compact representations. It also determines the version and type (e.g., 
+    ACDC, KERI) of the SAD and updates the version fields as necessary.
 
     Parameters:
-        sad (dict): The source nested dictionary (SAD) to process.
-        code (str): The digest type code used for SAID derivation.
-        kind (str): Serialization format to override the SAD's 'v' field if specified.
-        label (str): Field name used to locate and collapse structures.
-        ignore (list): Optional list of fields to exclude from SAID calculations.
+    ----------
+    sad : dict
+        The Self-Addressing Data (SAD) structure to be processed.
+    label : str, optional
+        The field name in the data used for the SAID (default is 'd').
+    version : int, optional
+        The version number to use for SAID calculations. If -1, it is inferred from 
+        the SAD's `v` field (default is -1).
+    compactify : bool, optional
+        If True, generates a fully compact representation; if False, the output will depend
+         on the detected major version.
 
     Returns:
-        dict: Contains 'paths', 'sads', 'saiders', 'compact', and 'non_compact' versions of the SAD.
+    -------
+    (compactified)
+    dict
+        A dictionary with the following keys:
+        - 'final_said' (str): The calculated SAID for the compact representation.
+        - 'version_1_said_calc' (str): SAID calculated for version 1 (if applicable).
+        - 'paths' (list): Paths to fields where SAIDs were calculated.
+        - 'sads' (dict): Non-compact SAD structures with updated SAIDs at specific paths.
+        - 'saiders' (dict): Calculated SAIDs for individual paths in the SAD.
+        - 'compact' (dict): The compacted SAD with integrated SAIDs.
+        - 'non_compact' (dict): The non-compacted SAD with integrated SAIDs.
+        - 'said' (str): The final SAID of the compact representation.
+        - 'major_version_detected' (int): The major version number detected from the SAD.
+        - 'label': the said label
+
+    Notes:
+    -----
+    - If the SAD's `v` field is present, the function extracts version information 
+      and uses it unless a specific version is supplied.
+    - For version 1 and `compactify=False`, the function skips additional compact 
+      processing and directly returns the version 1 SAID.
+    - The function distinguishes between compact and non-compact processing based on 
+      nested SAID paths, integrating them where required.
     """
+
     this_version = -1
+    sad_ = deepcopy(sad)
     if 'v' in sad:
-        v_obj = get_version_string_info(sad['v'], -1)
+        v_obj = get_version_string_info(sad_['v'], -1)
        
         this_version = v_obj['version'][0]
         if version == -1:
             version = int(this_version)
-        
-    version_1_said_calc, _ = get_blake3_256_said(sad, label, False)
+    version_1_said_calc, v = get_blake3_256_said(sad_, label, False)
     if str(version).startswith('1') and compactify == False:
-        return version_1_said_calc, this_version
+        sad_[label] = version_1_said_calc
+        sad_['v'] = v
+        return version_1_said_calc, sad_
     
     def pathJoin(a):
         return '.'.join(map(str, a))
 
-    paths = mapPathsToLabel(sad, label=label)  # Map paths to the specified label
-    non_compact = deepcopy(sad)#.copy()
-    compact = deepcopy(sad)#.copy()
+    paths = mapPathsToLabel(sad_, label=label)  # Map paths to the specified label
+    non_compact = deepcopy(sad_)#.copy()
+    compact = deepcopy(sad_)#.copy()
     sads = {}
     saiders = {}
     
@@ -838,7 +891,7 @@ def saidify(sad, label='d', version= -1, compactify=False):
             _sad = parent
         
         saiders[pathJoin(path)] = _sad[0]
-        sads[pathJoin(path[:-1])] = _sad[1]
+        sads[pathJoin(path)] = _sad[1]
         
         # Update `non_compact` only at the specific field level
         replaceNestedObject(non_compact, path, _sad[0])
@@ -884,7 +937,8 @@ def saidify(sad, label='d', version= -1, compactify=False):
         'non_compact': non_compact,
         'said': compact[label],
         'paths': paths,
-        'major_version_detected': this_version
+        'major_version_detected': this_version,
+        'label': label
     }
 
 def build_version_string(data, major = None):
@@ -911,4 +965,160 @@ def get_blake3_256_said(data, label, debug=False):
     aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
     b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
     said = substitute_derivation_code(b64_digest, 'E', to_pad)
-    return said, None
+    return said, v_string
+  
+def update_v2string_length(ked):
+    _raw = dict_to_keri_byte_str(ked)
+    _size = len(_raw)
+    size_b64 = int_to_b64(_size)
+    ## SANITY CHECK
+    size_from_b64 = b64_to_int(size_b64)
+    # print(f'byte size: {_size} \t\tsize_b64: {size_b64}, {size_from_b64 == _size}')
+    assert (size_from_b64 == _size)
+    ## update v string:
+    v_string = ked['v'][:-5] + size_b64 + '.'
+    return v_string
+
+def update_v1string_length(ked):
+    _raw = dict_to_keri_byte_str(ked)
+    _size = len(_raw)
+    size = f"{_size:06x}"
+    v_string = ked['v']
+    print(v_string)
+    v_string = v_string[:10] + size + '_'
+    return v_string
+# ==================================== SIMPLE DECOMPACTIFY ( iterative ) =================================================
+
+## construct a partial, given a list of paths and all the compact sads.
+def construct_partial(paths, sads, label):
+    """
+    Construct a partial decompacted version of a Self-Addressing Data (SAD) structure.
+
+    This function selectively reveals nested components of a compacted SAD structure 
+    based on the specified paths. It progressively decompacts parts of the SAD while 
+    keeping the rest compact. This is useful for revealing specific parts of a SAD 
+    without exposing the full data structure.
+
+    Parameters:
+    ----------
+    paths : list of lists
+        A list of paths, where each path is a list of keys that identify a nested
+        element in the SAD. The paths specify which parts of the compacted SAD
+        to reveal.
+    sads : dict
+        A dictionary of compacted SADs, typically generated from the `saidify` function.
+        The keys represent paths to nested components, and the values are the corresponding
+        SAD objects.
+    label : str
+        The field name in the SAD used as the SAID label (e.g., 'd').
+
+    Returns:
+    -------
+    dict
+        A partially decompacted SAD structure, where the specified paths have been
+        expanded to reveal their nested content.
+
+    Notes:
+    -----
+    - The function retrieves the root SAD from the `sads` dictionary using the label field.
+    - The paths are sorted by length to ensure hierarchical decompaction.
+    - For each path, the SAD is progressively decompacted by revealing the nested
+      structure up to the specified depth.
+    - If a path ends in the label (e.g., `['e', 'other', 'd']`), it is treated as equivalent
+      to `['e', 'other']`.
+
+    Example:
+    --------
+    Given the following SADs from `saidify` and paths to reveal:
+    >>> to_reveal = [['e'], ['r', 'Purpose']]
+    >>> partial = construct_partial(to_reveal, saidified['sads'], saidified['label'])
+
+    The resulting `partial` SAD will look like this:
+    >>> pp.pprint(partial)
+    { 'v': 'ACDC10JSON00AAJ9.',
+      'd': 'EBtlmHmvTAaT4Fk7OOLz8Lbj0-RRk-CcuAWJqqcM8zUW',
+      'i': 'did:keri:EmkPreYpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPM',
+      's': 'EGGeIZ8a8FWS7a646jrVPTzlSkUPqs4reAXRZOkogZ2A',
+      'a': 'EAlRl3pCPbtOWUz_O4xWpEJJrsMhQwjmIwLmXtxWz-fu',
+      'e': { 'd': 'ELklZ5xoxJV9w2mEantpo58a76OMp5Cby2S0gk2gU41F',
+             'other': 'ENZyhiv9penkbqBqblRpBYTznwf3h84uHh93s_e77A7t'},
+      'r': { 'd': 'EGP6QI5LL1X9unCUymIwtQRjp9p4r_loUgKdymVpn_VG',
+             'Purpose': { 'd': 'EOF9OZMZudCRFDU_AmJWY7Py3KdazRsGnbEz-QIQ7HJj',
+                          'l': 'One-time admittance of Issuer by Issuee to eat '
+                               'at place on date as specified in Attribute '
+                               'section.'}}}
+    """
+    # GET ROOT KED ( COMAPCITIFED ) 
+    for sad in sads:
+        sad_path = sad.split('.')
+        if sad_path == [label]:
+            root_ked = deepcopy(sads[sad])
+
+    # sort from shortest to longest, just because
+    paths = sorted(paths, key=len)
+    for path in paths:
+        root_ked = simple_decompactify(path, sads, label,root_ked)
+    return root_ked
+    
+def vIsFirst(data, key='v'):
+    if not isinstance(data, dict):
+        raise ValueError("Input data must be a dictionary.")
+    
+    keys = list(data.keys())
+    return keys[0] == key if keys else False
+    
+def simple_decompactify(path, all_sads, label,root_ked = {}):
+    """
+    Rebuilds a nested structure recursively by adding compactified versions
+    of SADs along the specified path.
+
+    Parameters:
+        path (list): The path to decompactify to.
+        all_sads (list): A list of Sadder instances.
+        root_ked (dict): the root ked to build on top of. default will fill to the compact ked
+    Returns:
+        dict: The modified root object with the specified path decompactified.
+    """    
+    if root_ked == {}:
+        for sad in all_sads:
+            sad_path = sad.split('.')
+            if [label] == sad_path:
+                rk = deepcopy(all_sads[sad])
+                root_ked = deepcopy(rk)
+    match_path = []
+    for key in path:
+        # go to current spot
+        match_path.append(key)
+        if key == label:
+            if vIsFirst(root_ked):
+                v_version = 1 if root_ked['v'].endswith('_') else 2
+                if v_version == 1:
+                    root_ked['v'] = update_v1string_length(root_ked)
+                    
+                else:
+                    root_ked['v']  = update_v2string_length(root_ked)
+            return root_ked
+        current_obj = root_ked
+        for p in match_path:
+          if p in current_obj:
+            if isinstance(current_obj[p], (dict, list)):
+              current_obj  = current_obj[p]
+              continue
+            else:
+              ## find sad that matches:
+              for sad in all_sads:
+                sad_path = sad.split('.')
+                if sad_path[:-1] ==  match_path:
+                  current_obj[p] = deepcopy(all_sads[sad])
+                  break
+              continue
+          else:
+            # print(p, match_path)
+            for sad in all_sads:
+              sad_path = sad.split('.')
+              if sad_path[:-1] ==  match_path:
+                current_obj[p] = deepcopy(all_sads[sad])
+                break
+    if vIsFirst(root_ked):
+        root_ked['v']  = update_v2string_length(root_ked)
+    return root_ked                
