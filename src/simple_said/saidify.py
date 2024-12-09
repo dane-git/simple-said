@@ -833,14 +833,13 @@ def saidify(sad, label='d', version= -1, compactify=False):
     (compactified)
     dict
         A dictionary with the following keys:
-        - 'final_said' (str): The calculated SAID for the compact representation.
-        - 'version_1_said_calc' (str): SAID calculated for version 1 (if applicable).
+        - 'said_v1' (str): SAID calculated for version 1 (if applicable).
+        - 'said' (str): The calculated SAID for the compact representation.
         - 'paths' (list): Paths to fields where SAIDs were calculated.
         - 'sads' (dict): Non-compact SAD structures with updated SAIDs at specific paths.
         - 'saiders' (dict): Calculated SAIDs for individual paths in the SAD.
         - 'compact' (dict): The compacted SAD with integrated SAIDs.
         - 'non_compact' (dict): The non-compacted SAD with integrated SAIDs.
-        - 'said' (str): The final SAID of the compact representation.
         - 'major_version_detected' (int): The major version number detected from the SAD.
         - 'label': the said label
 
