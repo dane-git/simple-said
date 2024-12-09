@@ -25,3 +25,5 @@ venv/
 
 .ipynb_checkpoints/
 scratch*.ipynb
+build/
+*.egg-info/

@@ -856,9 +856,8 @@ def saidify(sad, label='d', version= -1, compactify=False):
 
     this_version = -1
     sad_ = deepcopy(sad)
-    if 'v' in sad:
+    if 'v' in sad_:
         v_obj = get_version_string_info(sad_['v'], -1)
-       
         this_version = v_obj['version'][0]
         if version == -1:
             version = int(this_version)
@@ -928,15 +927,13 @@ def saidify(sad, label='d', version= -1, compactify=False):
     non_compact[label] = final_said
 
     return {
-        'final_said': compact[label],
-        'version_1_said_calc': version_1_said_calc,
+        'said_v1': version_1_said_calc,
+        'said': compact[label],
         'paths': paths,
         'sads': sads,
         'saiders': saiders,
         'compact': compact,
         'non_compact': non_compact,
-        'said': compact[label],
-        'paths': paths,
         'major_version_detected': this_version,
         'label': label
     }
@@ -971,11 +968,6 @@ def update_v2string_length(ked):
     _raw = dict_to_keri_byte_str(ked)
     _size = len(_raw)
     size_b64 = int_to_b64(_size)
-    ## SANITY CHECK
-    size_from_b64 = b64_to_int(size_b64)
-    # print(f'byte size: {_size} \t\tsize_b64: {size_b64}, {size_from_b64 == _size}')
-    assert (size_from_b64 == _size)
-    ## update v string:
     v_string = ked['v'][:-5] + size_b64 + '.'
     return v_string
 
@@ -984,7 +976,6 @@ def update_v1string_length(ked):
     _size = len(_raw)
     size = f"{_size:06x}"
     v_string = ked['v']
-    print(v_string)
     v_string = v_string[:10] + size + '_'
     return v_string
 # ==================================== SIMPLE DECOMPACTIFY ( iterative ) =================================================
