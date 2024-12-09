@@ -146,13 +146,8 @@ example = {
 
 saidified = saidify.saidify(example)
 ```
-### PARTIAL Disclosures:
-```python
-to_reveal = [['e'], ['r', 'Purpose']]
-partial = construct_partial(to_reveal, saidified['sads'], saidified['label'])
-```
-### Parial Result Example
 
+### Parial Disclosures Example
 
 #### Partial reveal 1
 ```python
