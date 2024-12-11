@@ -284,9 +284,8 @@ This function is particularly useful for controlled disclosure of data, where on
 
 ```python
 
-agg_expanded = { 
-  'v': 'ACDCCAAJSONAAXR.',
-  'd': 'ENlHA-EkJGkwIHhqKDn0BSTZ9tT-dYRqCq-2G-aSMNqk',
+agg_expanded = { 'v': 'ACDCCAAJSONAAWR.',
+  'd': 'EP4hAnTIAUtIJXtzHm6HaG5NuZO4JsYhVJtDRQr_Eef3',
   'u': '0AHcgNghkDaG7OY1wjaDAE0q',
   'i': 'EAqjsKFk66jpf3uFv7An2EDIPMvklXKhmkPreYpZfzBr',
   'rd': 'EMwsxUelUauaXtMxTfPAMPAI6FkekwlOjkggtymRy7x',
@@ -305,32 +304,32 @@ agg_expanded = {
          { 'd': 'EALtrm1Lhoa4PJcpmvwxpXzrE04GGRxsXWlK8EVTs3jF',
            'u': '0AghkDaG7OY1wjaDAE0qHcgN',
            'name': 'Jane Doe'}],
-  'r': { 'd': 'ENJaQBhwUr5PibfWi_DIajpd6MDVc39BopFlIBfAe-RN',
-         'Assimilation': { 'd': 'ENlj2cOTvH40XMV5uKdFP85LNEoBtPDSWkLwrr0GvmXQ',
-                           'u': '0AAxNda_GP6MeB_hDrQ-03RD',
-                           'l': 'Issuee hereby explicitly and unambiguously '
-                                'agrees to NOT assimilate, aggregate, '
-                                'correlate, or otherwise use in combination '
-                                'with other information available to the '
-                                'Issuee, the information, in whole or in part, '
-                                'referenced by this container or any '
-                                'containers recursively referenced by the edge '
-                                'section, for any purpose other than that '
-                                'expressly permitted by the Purpose clause.'},
-         'Purpose': { 'd': 'EIBWPzwdEYVM0MN6MJ4H0xr9V8MiOQsXegwvZoSZcgJo',
-                      'u': '0AXqUyDnOdyNq-NKI5CqdSrk',
-                      'l': 'One-time admittance of Issuer by Issuee to eat at '
-                           'place on date as specified in Attribute section.'}}}
+  'r': { 'd': 'EBGElk7bgI3eJXzmI1xdmB9heCCfOhkQKx8DI5LRM4V9',
+         'Correlation': { 'd': 'EEhRSkOjCqSXnwEx3ywRMhQEk1t8YbIfZRU3LykvxOZc',
+                          'u': '0AAxNda_GP6MeB_hDrQ-03RD',
+                          'l': 'Correlation of data referenced by this ACDC '
+                               'with other data or datasets disconnected from '
+                               'the ACDC is prohibited. Such correlation is '
+                               'only permitted with explicit authorization as '
+                               'defined by this ACDC.'},
+         'Confidential': { 'd': 'EMPn6SLAZmnRk8kBCyu4-oUBSaWMeoZ-6tVmwY8m21oM',
+                           'u': '0AXqUyDnOdyNq-NKI5CqdSrk',
+                           'l': 'This rule enforces the confidentiality of '
+                                'data referenced by this ACDC. Unauthorized '
+                                'sharing, disclosure, or use of this data is '
+                                'strictly prohibited and must adhere to the '
+                                'terms defined within this ACDC.'}}}
 
 partial_agg= saidify.disclosure_by_saids(agg_expanded, 
-                    ['EIBWPzwdEYVM0MN6MJ4H0xr9V8MiOQsXegwvZoSZcgJo',
+                    ['EEhRSkOjCqSXnwEx3ywRMhQEk1t8YbIfZRU3LykvxOZc',
+                     'EMPn6SLAZmnRk8kBCyu4-oUBSaWMeoZ-6tVmwY8m21oM',
                      'EFLx0eeyvz_kBgKuWl60Rh7rHXJiiXE9mUw7qtolLgTL'])
 pp.pprint(partial_agg )
 ```
 output:
 ```python
-{ 'v': 'ACDCCAAJSONAANj.',
-  'd': 'ENlHA-EkJGkwIHhqKDn0BSTZ9tT-dYRqCq-2G-aSMNqk',
+{ 'v': 'ACDCCAAJSONAATF.',
+  'd': 'EP4hAnTIAUtIJXtzHm6HaG5NuZO4JsYhVJtDRQr_Eef3',
   'u': '0AHcgNghkDaG7OY1wjaDAE0q',
   'i': 'EAqjsKFk66jpf3uFv7An2EDIPMvklXKhmkPreYpZfzBr',
   'rd': 'EMwsxUelUauaXtMxTfPAMPAI6FkekwlOjkggtymRy7x',
@@ -343,12 +342,21 @@ output:
            'pass': True,
            'score': 'EHdeZq0uF37SWzr_ng93XdcOpeKIsHUjyWOqEF7GIZ8C'},
          'EALtrm1Lhoa4PJcpmvwxpXzrE04GGRxsXWlK8EVTs3jF'],
-  'r': { 'd': 'ENJaQBhwUr5PibfWi_DIajpd6MDVc39BopFlIBfAe-RN',
-         'Assimilation': 'ENlj2cOTvH40XMV5uKdFP85LNEoBtPDSWkLwrr0GvmXQ',
-         'Purpose': { 'd': 'EIBWPzwdEYVM0MN6MJ4H0xr9V8MiOQsXegwvZoSZcgJo',
-                      'u': '0AXqUyDnOdyNq-NKI5CqdSrk',
-                      'l': 'One-time admittance of Issuer by Issuee to eat at '
-                           'place on date as specified in Attribute section.'}}}
+  'r': { 'd': 'EBGElk7bgI3eJXzmI1xdmB9heCCfOhkQKx8DI5LRM4V9',
+         'Correlation': { 'd': 'EEhRSkOjCqSXnwEx3ywRMhQEk1t8YbIfZRU3LykvxOZc',
+                          'u': '0AAxNda_GP6MeB_hDrQ-03RD',
+                          'l': 'Correlation of data referenced by this ACDC '
+                               'with other data or datasets disconnected from '
+                               'the ACDC is prohibited. Such correlation is '
+                               'only permitted with explicit authorization as '
+                               'defined by this ACDC.'},
+         'Confidential': { 'd': 'EMPn6SLAZmnRk8kBCyu4-oUBSaWMeoZ-6tVmwY8m21oM',
+                           'u': '0AXqUyDnOdyNq-NKI5CqdSrk',
+                           'l': 'This rule enforces the confidentiality of '
+                                'data referenced by this ACDC. Unauthorized '
+                                'sharing, disclosure, or use of this data is '
+                                'strictly prohibited and must adhere to the '
+                                'terms defined within this ACDC.'}}}
 ```
 
 
