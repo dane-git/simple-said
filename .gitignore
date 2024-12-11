@@ -27,3 +27,4 @@ venv/
 scratch*.ipynb
 build/
 *.egg-info/
+notebooks/

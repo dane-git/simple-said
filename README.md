@@ -45,9 +45,9 @@ saidify(sad, label='d', version=-1, compactify=False)
 - `said_v1` (str): SAID calculated for version 1 (if applicable).
 - `said` (str): The calculated SAID for the compact representation.
 - `paths` (list): Paths to fields where SAIDs were calculated.
-- `sads` (dict): Non-compact SAD structures with updated SAIDs at specific paths.
+- `sads` (dict): compact SAD structures with updated SAIDs at specific paths.
 - `saiders` (dict): Calculated SAIDs for individual paths in the SAD.
-- `compact` (dict): The compacted SAD with integrated SAIDs.
+- `compact` (dict): The compacted final SAD with integrated SAIDs.
 - `non_compact` (dict): The non-compacted SAD with integrated SAIDs.
 - `major_version_detected` (int): The major version number detected from the SAD.
 - `label`: the said label.   
@@ -250,6 +250,105 @@ output:
                            'place on date as specified in Attribute section.'}
         }
 }
+```
+
+
+### 4\.**`disclosure_by_saids`**
+
+#### **Description**
+
+The `disclosure_by_saids` function selectively expands (decompacts) specific SAIDs (Self-Addressing Identifiers) within a Self-Addressing Data (SAD) structure. It is used to partially reveal specific components of a compacted SAD while keeping the rest of the structure in its compact form.
+
+This function is particularly useful for controlled disclosure of data, where only selected parts of a SAD are expanded based on a given list of SAIDs.
+
+* * *
+
+#### **Parameters**
+
+- **`expanded`** *(dict)*:
+    
+    - A fully or partially expanded SAD structure that serves as the base for disclosure.
+- **`saids`** *(list of str)*:
+    
+    - A list of SAIDs (Self-Addressing Identifiers) to expand within the SAD.
+- **`label`** *(str, optional)*:
+    
+    - The label field in the SAD that identifies SAIDs. Defaults to `'d'`.
+
+* * *
+
+#### **Returns**
+
+- **`exposed`** *(dict)*:
+    - A partially decompactified (partially disclosed) SAD structure where the specified SAIDs are expanded.
+
+```python
+
+agg_expanded = { 
+  'v': 'ACDCCAAJSONAAXR.',
+  'd': 'ENlHA-EkJGkwIHhqKDn0BSTZ9tT-dYRqCq-2G-aSMNqk',
+  'u': '0AHcgNghkDaG7OY1wjaDAE0q',
+  'i': 'EAqjsKFk66jpf3uFv7An2EDIPMvklXKhmkPreYpZfzBr',
+  'rd': 'EMwsxUelUauaXtMxTfPAMPAI6FkekwlOjkggtymRy7x',
+  's': 'EAXRZOkogZ2A46jrVPTzlSkUPqGGeIZ8a8FWS7a6s4re',
+  'A': [ { 'd': 'EC9mAmY9RI140l3CX_6EK6aDl5lXns6TM65Ho00pM4nm',
+           'u': '0AqHcgNghkDaG7OY1wjaDAE0',
+           'i': 'did:keri:EpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPmkPreYA'},
+         { 'd': 'EFLx0eeyvz_kBgKuWl60Rh7rHXJiiXE9mUw7qtolLgTL',
+           'u': '0AG7OY1wjaDAE0qHcgNghkDa',
+           'class': 'Chemistry',
+           'quarter': '2022-1',
+           'pass': True,
+           'score': { 'd': 'EHdeZq0uF37SWzr_ng93XdcOpeKIsHUjyWOqEF7GIZ8C',
+                      'u': '0AtzfJAh4ZY_aOEMjfquKB3H',
+                      'value': '83.4'}},
+         { 'd': 'EALtrm1Lhoa4PJcpmvwxpXzrE04GGRxsXWlK8EVTs3jF',
+           'u': '0AghkDaG7OY1wjaDAE0qHcgN',
+           'name': 'Jane Doe'}],
+  'r': { 'd': 'ENJaQBhwUr5PibfWi_DIajpd6MDVc39BopFlIBfAe-RN',
+         'Assimilation': { 'd': 'ENlj2cOTvH40XMV5uKdFP85LNEoBtPDSWkLwrr0GvmXQ',
+                           'u': '0AAxNda_GP6MeB_hDrQ-03RD',
+                           'l': 'Issuee hereby explicitly and unambiguously '
+                                'agrees to NOT assimilate, aggregate, '
+                                'correlate, or otherwise use in combination '
+                                'with other information available to the '
+                                'Issuee, the information, in whole or in part, '
+                                'referenced by this container or any '
+                                'containers recursively referenced by the edge '
+                                'section, for any purpose other than that '
+                                'expressly permitted by the Purpose clause.'},
+         'Purpose': { 'd': 'EIBWPzwdEYVM0MN6MJ4H0xr9V8MiOQsXegwvZoSZcgJo',
+                      'u': '0AXqUyDnOdyNq-NKI5CqdSrk',
+                      'l': 'One-time admittance of Issuer by Issuee to eat at '
+                           'place on date as specified in Attribute section.'}}}
+
+partial_agg= saidify.disclosure_by_saids(agg_expanded, 
+                    ['EIBWPzwdEYVM0MN6MJ4H0xr9V8MiOQsXegwvZoSZcgJo',
+                     'EFLx0eeyvz_kBgKuWl60Rh7rHXJiiXE9mUw7qtolLgTL'])
+pp.pprint(partial_agg )
+```
+output:
+```python
+{ 'v': 'ACDCCAAJSONAANj.',
+  'd': 'ENlHA-EkJGkwIHhqKDn0BSTZ9tT-dYRqCq-2G-aSMNqk',
+  'u': '0AHcgNghkDaG7OY1wjaDAE0q',
+  'i': 'EAqjsKFk66jpf3uFv7An2EDIPMvklXKhmkPreYpZfzBr',
+  'rd': 'EMwsxUelUauaXtMxTfPAMPAI6FkekwlOjkggtymRy7x',
+  's': 'EAXRZOkogZ2A46jrVPTzlSkUPqGGeIZ8a8FWS7a6s4re',
+  'A': [ 'EC9mAmY9RI140l3CX_6EK6aDl5lXns6TM65Ho00pM4nm',
+         { 'd': 'EFLx0eeyvz_kBgKuWl60Rh7rHXJiiXE9mUw7qtolLgTL',
+           'u': '0AG7OY1wjaDAE0qHcgNghkDa',
+           'class': 'Chemistry',
+           'quarter': '2022-1',
+           'pass': True,
+           'score': 'EHdeZq0uF37SWzr_ng93XdcOpeKIsHUjyWOqEF7GIZ8C'},
+         'EALtrm1Lhoa4PJcpmvwxpXzrE04GGRxsXWlK8EVTs3jF'],
+  'r': { 'd': 'ENJaQBhwUr5PibfWi_DIajpd6MDVc39BopFlIBfAe-RN',
+         'Assimilation': 'ENlj2cOTvH40XMV5uKdFP85LNEoBtPDSWkLwrr0GvmXQ',
+         'Purpose': { 'd': 'EIBWPzwdEYVM0MN6MJ4H0xr9V8MiOQsXegwvZoSZcgJo',
+                      'u': '0AXqUyDnOdyNq-NKI5CqdSrk',
+                      'l': 'One-time admittance of Issuer by Issuee to eat at '
+                           'place on date as specified in Attribute section.'}}}
 ```
 
 

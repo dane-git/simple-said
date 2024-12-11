@@ -648,6 +648,50 @@ def mapPathsToLabel(data, label='d'):
     paths.sort(key=lambda x: len(x), reverse=True)
     return paths
 
+def find_value_in_dict(data, target, current_path=()):
+    """
+    Recursively find the path to a target value in a dictionary.
+    The value can occur as a key or a value, even in nested structures or lists.
+
+    Parameters:
+    ----------
+    data : dict | list
+        The dictionary or list to search.
+    target : Any
+        The value to search for.
+    current_path : tuple, optional
+        The current path being traversed (default: empty tuple).
+
+    Returns:
+    -------
+    tuple | None
+        The path to the target value as a tuple, or None if not found.
+    """
+    if isinstance(data, dict):
+        for key, value in data.items():
+            # Check if the key matches the target
+            if key == target:
+                return current_path + (key,)
+            # Check if the value matches the target
+            if value == target:
+                return current_path + (key,)
+            # Recurse into nested structures
+            if isinstance(value, (dict, list)):
+                result = find_value_in_dict(value, target, current_path + (key,))
+                if result is not None:
+                    return result
+
+    elif isinstance(data, list):
+        for index, item in enumerate(data):
+            # Check each item in the list
+            if item == target:
+                return current_path + (index,)
+            # Recurse into nested structures
+            if isinstance(item, (dict, list)):
+                result = find_value_in_dict(item, target, current_path + (index,))
+                if result is not None:
+                    return result
+    return None
 
 def getNestedObjectAndParent(data, path):
     """
@@ -836,7 +880,7 @@ def saidify(sad, label='d', version= -1, compactify=False):
         - 'said_v1' (str): SAID calculated for version 1 (if applicable).
         - 'said' (str): The calculated SAID for the compact representation.
         - 'paths' (list): Paths to fields where SAIDs were calculated.
-        - 'sads' (dict): Non-compact SAD structures with updated SAIDs at specific paths.
+        - 'sads' (dict): (tuple[path]): SAD: compact SAD structures with updated SAIDs at specific paths.
         - 'saiders' (dict): Calculated SAIDs for individual paths in the SAD.
         - 'compact' (dict): The compacted SAD with integrated SAIDs.
         - 'non_compact' (dict): The non-compacted SAD with integrated SAIDs.
@@ -889,7 +933,7 @@ def saidify(sad, label='d', version= -1, compactify=False):
             _sad = parent
         
         saiders[pathJoin(path)] = _sad[0]
-        sads[pathJoin(path)] = _sad[1]
+        sads[tuple(path)] = _sad[1]
         
         # Update `non_compact` only at the specific field level
         replaceNestedObject(non_compact, path, _sad[0])
@@ -1040,8 +1084,8 @@ def construct_partial(paths, sads, label):
     """
     # GET ROOT KED ( COMAPCITIFED ) 
     for sad in sads:
-        sad_path = sad.split('.')
-        if sad_path == [label]:
+        sad_path = sad
+        if sad_path[0] == label:
             root_ked = deepcopy(sads[sad])
 
     # sort from shortest to longest, just because
@@ -1071,8 +1115,8 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
     """    
     if root_ked == {}:
         for sad in all_sads:
-            sad_path = sad.split('.')
-            if [label] == sad_path:
+            sad_path
+            if label == sad_path[0]:
                 rk = deepcopy(all_sads[sad])
                 root_ked = deepcopy(rk)
     match_path = []
@@ -1084,7 +1128,6 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
                 v_version = 1 if root_ked['v'].endswith('_') else 2
                 if v_version == 1:
                     root_ked['v'] = update_v1string_length(root_ked)
-                    
                 else:
                     root_ked['v']  = update_v2string_length(root_ked)
             return root_ked
@@ -1097,18 +1140,52 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
             else:
               ## find sad that matches:
               for sad in all_sads:
-                sad_path = sad.split('.')
-                if sad_path[:-1] ==  match_path:
+                sad_path = sad
+                if sad_path[:-1] ==  tuple(match_path):
                   current_obj[p] = deepcopy(all_sads[sad])
                   break
               continue
           else:
             # print(p, match_path)
             for sad in all_sads:
-              sad_path = sad.split('.')
-              if sad_path[:-1] ==  match_path:
+              sad_path = sad
+              if sad_path[:-1] ==  tuple(match_path):
                 current_obj[p] = deepcopy(all_sads[sad])
                 break
     if vIsFirst(root_ked):
         root_ked['v']  = update_v2string_length(root_ked)
     return root_ked                
+
+
+def disclosure_by_saids(expanded, saids, label='d'):
+    """
+    Partially discloses a Self-Addressing Data (SAD) structure by selectively expanding specified SAIDs.
+
+    This function takes a fully or partially expanded SAD, a list of SAIDs to expand, and a label field.
+    It finds the paths to the specified SAIDs in the SAD, compacts the SAD using the `saidify` function,
+    and reconstructs a partially expanded version using the specified SAIDs.
+
+    Parameters:
+    ----------
+    expanded : dict
+        The fully or partially expanded SAD structure to process.
+        This is the base data structure from which the specified SAIDs will be selectively expanded.
+    saids : list of str
+        A list of SAIDs (Self-Addressing Identifiers) to expand within the SAD.
+    label : str, optional
+        The label field used to identify SAIDs in the SAD (default is 'd').
+
+    Returns:
+    -------
+    dict
+        A partially decompactified SAD structure where the specified SAIDs are expanded.
+    """
+    paths = []
+    for said in saids:
+        p = find_value_in_dict(expanded, said)
+        if p is not None:
+            paths.append(p)
+    s = saidify(expanded, label=label, compactify=True)
+    sads = s['sads']
+    exposed = construct_partial(paths, sads, label)
+    return exposed
