@@ -73,12 +73,10 @@ def parse_input_args():
             "version": current_version,
         })
     data_list = []
-    # print(95)
-    # print(file_list)
+
     for idx in range(len(file_list)):
         try:
             f = os.path.basename(file_list[idx]['file_name'])
-            # print(101,f)
             
             with open(file_list[idx]['file_name'], "r") as file:
                 json_data = json.load(file)
@@ -947,10 +945,34 @@ def saidify(sad, label='d', version= -1, compactify=False):
         else:
             compact = _sad[1]
 
+
+    ## TODO Fix, only root level aggregated A field handeled.
+    if 'A' in compact:
+        
+        if isinstance(compact['A'], list):
+            all_saids = True
+            arr_saids = []
+            for elem in compact['A']:
+                ## TODO: fix this
+                ## unsafe assumption
+                if isinstance(elem, str) and len(elem) % 22 == 0:
+                    arr_saids.append(elem)
+                else:
+                    # print(elem, type(elem) ,len(elem) %22)
+                    all_saids = False
+            if all_saids:
+                agg_said = keri_blake256_data(''.join(arr_saids))
+                sads[tuple('A')] = agg_said
+                for i, e in enumerate(arr_saids):
+                    p = ('A',i)
+                    sads[p] = e
+                    saiders[p] = e
+                    paths.append(list(p))
+                    
+                compact['A'] = agg_said
     t= 'ACDC'
     if 'v' in non_compact:
         if  'KERI' in non_compact['v']:
-            print("8"*88)
             t = 'KERI'
         else: 
             t = "ACDC"
@@ -962,7 +984,8 @@ def saidify(sad, label='d', version= -1, compactify=False):
         compact_v = build_version(compact, t, kind = 'JSON', major=version, minor=0)
 
         compact['v'] = compact_v
-
+                
+                    
     compact_said, _, _ = get_said(compact, label=label)
     compact[label] = compact_said
     final_said = compact[label]
@@ -994,6 +1017,19 @@ def build_version_string(data, major = None):
             minor=int(''.join(v_info['version'].split('.')[1:]))
         )
     return None
+
+def keri_blake256_data(data):
+    if is_dict:
+        data = dict_to_keri_byte_str(data)
+    if is_string(data):
+        data = data.encode()
+    blake3_byte_arr = blake3_to_byte_array(data)
+    to_pad = calc_pad_bits(blake3_byte_arr,24)
+    aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
+    b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
+    said = substitute_derivation_code(b64_digest, 'E', to_pad)
+    return said
+
 # determine_keri_version(stream)
 def get_blake3_256_said(data, label, debug=False):
     data_2 = replace_said_label(data, label)
@@ -1005,6 +1041,7 @@ def get_blake3_256_said(data, label, debug=False):
     aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
     b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
     said = substitute_derivation_code(b64_digest, 'E', to_pad)
+    said2 = keri_blake256_data(data_2)
     return said, v_string
   
 def update_v2string_length(ked):
@@ -1087,7 +1124,20 @@ def construct_partial(paths, sads, label):
         sad_path = sad
         if sad_path[0] == label:
             root_ked = deepcopy(sads[sad])
-
+    
+    
+    ## TODO Fix, only root level aggregated A field handeled.
+    has_agg_paths = False
+    for p in paths:
+        if 'A' in p:
+            has_agg_paths = True
+    
+    if has_agg_paths:
+        expanded_agg = []
+        for p in sads:
+            if len(p) == 2 and p[0] == 'A':
+                expanded_agg.append(sads[p])
+        root_ked['A'] = expanded_agg
     # sort from shortest to longest, just because
     paths = sorted(paths, key=len)
     for path in paths:
@@ -1120,8 +1170,9 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
                 rk = deepcopy(all_sads[sad])
                 root_ked = deepcopy(rk)
     match_path = []
+
     for key in path:
-        # go to current spot
+
         match_path.append(key)
         if key == label:
             if vIsFirst(root_ked):
@@ -1133,6 +1184,7 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
             return root_ked
         current_obj = root_ked
         for p in match_path:
+          
           if p in current_obj:
             if isinstance(current_obj[p], (dict, list)):
               current_obj  = current_obj[p]
@@ -1144,14 +1196,20 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
                 if sad_path[:-1] ==  tuple(match_path):
                   current_obj[p] = deepcopy(all_sads[sad])
                   break
+              
               continue
           else:
             # print(p, match_path)
             for sad in all_sads:
               sad_path = sad
               if sad_path[:-1] ==  tuple(match_path):
-                current_obj[p] = deepcopy(all_sads[sad])
+                  
+                if not isinstance(current_obj[p], dict):
+                    current_obj[p] = deepcopy(all_sads[sad])
+                else:
+                    current_obj = current_obj[p]
                 break
+        
     if vIsFirst(root_ked):
         root_ked['v']  = update_v2string_length(root_ked)
     return root_ked                
@@ -1185,6 +1243,7 @@ def disclosure_by_saids(expanded, saids, label='d'):
         p = find_value_in_dict(expanded, said)
         if p is not None:
             paths.append(p)
+        
     s = saidify(expanded, label=label, compactify=True)
     sads = s['sads']
     exposed = construct_partial(paths, sads, label)
