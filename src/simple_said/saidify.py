@@ -930,7 +930,7 @@ def saidify(sad, label='d', version= -1, compactify=False):
         else:
             _sad = parent
         
-        saiders[pathJoin(path)] = _sad[0]
+        saiders[tuple(path)] = _sad[0]
         sads[tuple(path)] = _sad[1]
         
         # Update `non_compact` only at the specific field level
@@ -970,6 +970,10 @@ def saidify(sad, label='d', version= -1, compactify=False):
                     paths.append(list(p))
                     
                 compact['A'] = agg_said
+                _p = tuple('A')
+                sads[_p] = agg_said
+                saiders[_p] = agg_said
+                paths.append(['A'])
     t= 'ACDC'
     if 'v' in non_compact:
         if  'KERI' in non_compact['v']:
@@ -1131,15 +1135,18 @@ def construct_partial(paths, sads, label):
     for p in paths:
         if 'A' in p:
             has_agg_paths = True
-    
+    print(paths)
     if has_agg_paths:
+        print(has_agg_paths)
         expanded_agg = []
         for p in sads:
-            if len(p) == 2 and p[0] == 'A':
+            if len(p) <= 2 and p[0] == 'A':
                 expanded_agg.append(sads[p])
+            
         root_ked['A'] = expanded_agg
     # sort from shortest to longest, just because
     paths = sorted(paths, key=len)
+    print(paths)
     for path in paths:
         root_ked = simple_decompactify(path, sads, label,root_ked)
     return root_ked
@@ -1171,8 +1178,11 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
                 root_ked = deepcopy(rk)
     match_path = []
 
+    A = None
+    for s in all_sads:
+        if s == tuple('A'):
+            A = all_sads[s]
     for key in path:
-
         match_path.append(key)
         if key == label:
             if vIsFirst(root_ked):
@@ -1184,14 +1194,22 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
             return root_ked
         current_obj = root_ked
         for p in match_path:
-          
           if p in current_obj:
             if isinstance(current_obj[p], (dict, list)):
+              if p == 'A':
+                  if 'A' in current_obj:
+                      if A in current_obj['A']:
+                          current_obj['A'].remove(A)
+                  elif A in current_obj:
+                      print(1206)
+                      current_obj.remove(A)
               current_obj  = current_obj[p]
               continue
             else:
               ## find sad that matches:
               for sad in all_sads:
+                if p == 'A' and path[-1] != 'A':
+                    continue
                 sad_path = sad
                 if sad_path[:-1] ==  tuple(match_path):
                   current_obj[p] = deepcopy(all_sads[sad])
@@ -1202,9 +1220,14 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
             # print(p, match_path)
             for sad in all_sads:
               sad_path = sad
+              if p == 'A' and path[-1] != 'A':
+                  continue
               if sad_path[:-1] ==  tuple(match_path):
-                  
+                
                 if not isinstance(current_obj[p], dict):
+                    if 'A' in path:
+                        if A in current_obj:
+                            current_obj.remove(A)
                     current_obj[p] = deepcopy(all_sads[sad])
                 else:
                     current_obj = current_obj[p]
@@ -1239,12 +1262,23 @@ def disclosure_by_saids(expanded, saids, label='d'):
         A partially decompactified SAD structure where the specified SAIDs are expanded.
     """
     paths = []
+    not_found = []
     for said in saids:
         p = find_value_in_dict(expanded, said)
         if p is not None:
             paths.append(p)
-        
+        if p is None:
+            not_found.append(said)
+    
+ 
     s = saidify(expanded, label=label, compactify=True)
+    if len(not_found):
+        # pass
+        for nf in not_found:
+            for p in s['saiders']:
+                if s['saiders'][p] == nf:
+                    paths.append(p)
+        
     sads = s['sads']
     exposed = construct_partial(paths, sads, label)
     return exposed
