@@ -253,7 +253,7 @@ output:
 ```
 
 
-### 4\.**`disclosure_by_saids`**
+### 4\. **`disclosure_by_saids`**
 
 #### **Description**
 
@@ -357,8 +357,130 @@ output:
                                 'sharing, disclosure, or use of this data is '
                                 'strictly prohibited and must adhere to the '
                                 'terms defined within this ACDC.'}}}
+                                
+```
+### 5\.: `recursive_saidify`
+
+### Description
+
+The `recursive_saidify` function recursively processes a nested dictionary (or SAD - Self-Addressing Data), replacing specific fields (indicated by the `label` parameter) with their calculated SAIDs (Self-Addressing Identifiers). It also handles special **aggregate fields**, labeled as `"A"`, by collapsing them into a single hash value. This ensures that child structures are fully processed before calculating the SAIDs of their parent structures.
+
+This function guarantees that the **final compact form** of the SAD is consistent and all SAIDs match their calculated values.
+
+* * *
+
+### Key Features:
+
+1.  **Recursive Replacement**:
+    
+    - Replaces all occurrences of a specified label (e.g., `'d'`) with their calculated SAID.
+2.  **Aggregate Field Collapsing**:
+    - Special fields labeled `"A"` (lists of SAIDS) are collapsed into a single concatenated SAID.
+    - Ensures that the aggregated field is resolved before calculating parent SAIDs.
+3.  **Validation**:
+    - Reports mismatches between provided SAIDs and recalculated SAIDs.
+    - Tracks the **validity** of the entire structure.
+4.  **Path Tracking**:
+    - Tracks the paths (as tuples) to every SAID and SAD encountered.
+5.  **Compact Form**:
+    - Generates the most compact form of the SAD by collapsing and replacing all redundant or unnecessary structures.
+
+* * *
+
+### Parameters:
+
+- **`sad`** *(dict)*: The input dictionary (SAD) to process.
+- **`label`** *(str)*: The target field to identify and replace with calculated SAIDs (e.g., `'d'`).
+- **`debug`** *(bool, optional)*: Enables detailed debug output for troubleshooting (default: `False`).
+
+* * *
+
+### Returns:
+
+The function returns a dictionary containing the following keys:
+
+| **Key** | **Type** | **Description** |
+| --- | --- | --- |
+| `saids` | `dict` | A dictionary mapping **paths (as tuples)** to their corresponding SAID strings. |
+| `sads` | `dict` | A dictionary mapping **paths (as tuples)** to their fully compacted SADs. |
+| `report` | `dict` | A dictionary reporting SAID validation results with entries like: `(valid: bool, calculated, original)`. |
+| `paths` | `list` of `tuples` | A list of paths where SAIDs or SADs were processed in the structure. |
+| `valid` | `bool` | `True` if all provided SAIDs match their recalculated values, `False` otherwise. |
+| `compact` | `dict` | The most compact version of the input SAD, with all fields resolved and collapsed. |
+
+
+### Example:
+
+```python
+agg_expanded = { 'v': 'ACDCCAAJSONAAWR.',
+  'd': 'EP4hAnTIAUtIJXtzHm6HaG5NuZO4JsYhVJtDRQr_Eef3',
+  'u': '0AHcgNghkDaG7OY1wjaDAE0q',
+  'i': 'EAqjsKFk66jpf3uFv7An2EDIPMvklXKhmkPreYpZfzBr',
+  'rd': 'EMwsxUelUauaXtMxTfPAMPAI6FkekwlOjkggtymRy7x',
+  's': 'EAXRZOkogZ2A46jrVPTzlSkUPqGGeIZ8a8FWS7a6s4re',
+  'A': [ { 'd': 'EAAAAmY9RI140l3CX_6EK6aDl5lXns6TM65Ho00pM4nm',
+           'u': '0AqHcgNghkDaG7OY1wjaDAE0',
+           'i': 'did:keri:EpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPmkPreYA'},
+         { 'd': 'EAAAA0eeyvz_kBgKuWl60Rh7rHXJiiXE9mUw7qtolLgTL',
+           'u': '0AG7OY1wjaDAE0qHcgNghkDa',
+           'class': 'Chemistry',
+           'quarter': '2022-1',
+           'pass': True,
+           'score': { 'd': 'EAAAq0uF37SWzr_ng93XdcOpeKIsHUjyWOqEF7GIZ8C',
+                      'u': '0AtzfJAh4ZY_aOEMjfquKB3H',
+                      'value': '83.4'}},
+         { 'd': 'EALtrm1Lhoa4PJcpmvwxpXzrE04GGRxsXWlK8EVTs3jF',
+           'u': '0AghkDaG7OY1wjaDAE0qHcgN',
+           'name': 'Jane Doe'}],
+  'r': { 'd': 'EAAAlk7bgI3eJXzmI1xdmB9heCCfOhkQKx8DI5LRM4V9',
+         'Correlation': { 'd': 'EAAASkOjCqSXnwEx3ywRMhQEk1t8YbIfZRU3LykvxOZc',
+                          'u': '0AAxNda_GP6MeB_hDrQ-03RD',
+                          'l': 'Correlation of data referenced by this ACDC '
+                               'with other data or datasets disconnected from '
+                               'the ACDC is prohibited. Such correlation is '
+                               'only permitted with explicit authorization as '
+                               'defined by this ACDC.'},
+         'Confidential': { 'd': 'EAAA6SLAZmnRk8kBCyu4-oUBSaWMeoZ-6tVmwY8m21oM',
+                           'u': '0AXqUyDnOdyNq-NKI5CqdSrk',
+                           'l': 'This rule enforces the confidentiality of '
+                                'data referenced by this ACDC. Unauthorized '
+                                'sharing, disclosure, or use of this data is '
+                                'strictly prohibited and must adhere to the '
+                                'terms defined within this ACDC.'}}
+}
+
+saidified = saidify.recursive_saidify(agg_expanded, 'd', debug=False)
+saidified['paths']
+
 ```
 
+output:
+```python
+# note the path ('A', '...') 
+# '...' to represent expanded A ( list of SAIDS )
+[('A', 0, 'd'),
+ ('A', 1, 'score', 'd'),
+ ('A', 1, 'd'),
+ ('A', 2, 'd'),
+ ('r', 'Correlation', 'd'),
+ ('r', 'Confidential', 'd'),
+ ('r', 'd'),
+ ('A', '...'),
+ ('d',)]
+```
+
+```python
+c['compact']
+
+{'v': 'ACDCCAAJSONAAFp.',
+ 'd': 'EIa4er5PeTSwU9TA-vPWFaWG_bKmmkM4Lk5gC30n8HwT',
+ 'u': '0AHcgNghkDaG7OY1wjaDAE0q',
+ 'i': 'EAqjsKFk66jpf3uFv7An2EDIPMvklXKhmkPreYpZfzBr',
+ 'rd': 'EMwsxUelUauaXtMxTfPAMPAI6FkekwlOjkggtymRy7x',
+ 's': 'EAXRZOkogZ2A46jrVPTzlSkUPqGGeIZ8a8FWS7a6s4re',
+ 'A': 'EEV8mW9PnLlgsjMGHovFdm4uJ_I7-EJG7kXaSruLCCA5',
+ 'r': 'EBGElk7bgI3eJXzmI1xdmB9heCCfOhkQKx8DI5LRM4V9'}
+```
 
 
 

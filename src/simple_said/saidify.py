@@ -1,415 +1,32 @@
-import json
-import blake3
-import base64
-import datetime
-import sys
-import re
-import shutil
+from simple_said.kutils import (
+    replace_said_label,
+    is_dict,
+    equal_in_list,
+    dict_to_keri_byte_str,
+    determine_keri_version,
+    build_version,
+    deepcopy,
+    get_version_string_info,
+    calc_pad_bits,
+    pad_byte_array,
+    byte_array_to_urlsafe_base64,
+    substitute_derivation_code,
+    dict_to_said_str,
+    blake3_256_from_dict,
+    keri_blake256_data,
+    get_blake3_256_said,
+    update_v1string_length,
+    update_v2string_length,
+    v_is_first
+    )
+
+
 import pprint
-import os
 
 
 pp = pprint.PrettyPrinter(indent=2, sort_dicts=False)
-def load_json_from_file(file_path):
-    """
-    Loads a JSON file from the given file path and returns its contents as a dictionary.
-
-    Parameters:
-        file_path (str): The path to the JSON file.
-
-    Returns:
-        dict: The contents of the JSON file as a dictionary.
-    """
-    with open(file_path, 'r') as file:
-        data = json.load(file)
-    return data
 
 
-
-def parse_input_args():
-    """
-    Custom argument parser for input files and their associated labels and versions.
-
-    Returns:
-        list: A list of dictionaries, each containing file information:
-              - file_name (str): The input file name.
-              - label (str or None): The associated label, if provided.
-              - version (str or None): The associated version, if provided.
-    """
-    args = sys.argv[1:]  # Skip the script name
-    file_list = []
-    current_file = None
-    current_label = None
-    current_version = None
-
-    i = 0
-    while i < len(args):
-        if args[i] in ["-i", "--input"]:  # New input file
-            # Save the previous file's data if available
-            if current_file:
-                file_list.append({
-                    "file_name": current_file,
-                    "label": current_label,
-                    "version": current_version,
-                })
-            # Start new input file tracking
-            current_file = args[i + 1] if i + 1 < len(args) else None
-            current_label = None
-            current_version = None
-            i += 1  # Skip to the next argument
-        elif args[i] in ["-d", "--label"]:  # Label for the current input file
-            current_label = args[i + 1] if i + 1 < len(args) else None
-            i += 1  # Skip to the next argument
-        elif args[i] in ["-v", "--version"]:  # Version for the current input file
-            current_version = args[i + 1] if i + 1 < len(args) else None
-            i += 1  # Skip to the next argument
-        i += 1
-
-    # Save the last file's data if available
-    if current_file:
-        file_list.append({
-            "file_name": current_file,
-            "label": current_label,
-            "version": current_version,
-        })
-    data_list = []
-
-    for idx in range(len(file_list)):
-        try:
-            f = os.path.basename(file_list[idx]['file_name'])
-            
-            with open(file_list[idx]['file_name'], "r") as file:
-                json_data = json.load(file)
-                print(97, json_data.get("v"))
-                label = file_list[idx]['label']
-                version = file_list[idx]['version']
-                
-
-                # Infer label if not explicitly provided
-                if label is None:
-                    if "d" in json_data:
-                        label = "d"
-                    elif "$id" in json_data:
-                        label = "$id"
-
-                # Infer version if not explicitly provided
-                if version is None:
-                    version = json_data.get("v")
-                    if version is not None:
-                        version= determine_keri_version(dict_to_keri_byte_str(json_data))
-
-                data_list.append(
-                    {
-                        "file_path": f,
-                        "file_name": os.path.basename(f),
-                        "label": label,
-                        "version": version,
-                        "data": json_data,
-                    }
-                )
-        except FileNotFoundError:
-            print(f"Error: The file '{f}' was not found.")
-            sys.exit(1)
-        except json.JSONDecodeError:
-            print(f"Error: The file '{f}' is not valid JSON.")
-            sys.exit(1)
-
-    return data_list
-
-
-
-
-def center_text(text, n, pad_char=' '):
-    """
-    Centers text within a given number of spots (n).
-    If the text is longer than n, it truncates the text.
-
-    Parameters:
-        text (str): The text to be centered.
-        n (int): The total number of spots.
-
-    Returns:
-        str: The centered or truncated text.
-    """
-    # Truncate text if it's longer than n
-    if len(text) > n:
-        return text[:n]
-    
-    # Center text by adding padding on both sides
-    left_padding = (n - len(text)) // 2
-    right_padding = n - len(text) - left_padding
-    return pad_char * left_padding + text + pad_char * right_padding
-
-def blake3_to_byte_array(data):
-    '''
-    compute the BLAKE3 hash and get the bytes (which is a byte array)
-    '''
-    hasher = blake3.blake3()
-    hasher.update(data)
-    byte_array = hasher.digest()
-    return byte_array
-
-  
-def dict_to_said_str(data_dict):
-    """
-    Convert the dictionary to a JSON string 
-    without extra spaces after commas and colons
-    """
-    json_str = json.dumps(data_dict, separators=(',', ':'))
-    return json_str
-  
-def dict_to_keri_byte_str(data_dict, to_bytes=True):
-    # Convert the dictionary to a JSON string without extra spaces after commas and colons
-    json_str = json.dumps(data_dict, separators=(',', ':'))
-    if to_bytes:
-        json_str = json_str.encode('utf-8')
-    return json_str
-
-def get_file_length_in_bytes(file_path):
-    """
-    Reads a file in as bytes and returns its length.
-
-    Parameters:
-        file_path (str): The path to the file.
-
-    Returns:
-        int: The length of the file in bytes.
-    """
-    with open(file_path, 'rb') as file:
-        file_bytes = file.read()
-        return len(file_bytes)
-def read_file_as_bytes(file_path):
-    with open(file_path, 'rb') as file:
-        file_bytes = file.read()
-        return file_bytes
-
-def is_bytes(obj):
-    return isinstance(obj, bytes)
-def is_string(obj):
-    return isinstance(obj, str)
-
-def byte_to_bits(byte):
-    return format(byte, '08b')
-  
-def bytes_to_bits(byte_array):
-    return ''.join(format(byte, '08b') for byte in byte_array)
-
-def get_file_length_in_chars(file_path):
-        """
-        Reads a file as a string and returns its character length.
-    
-        Parameters:
-            file_path (str): The path to the file.
-    
-        Returns:
-            int: The length of the file in characters.
-        """
-        with open(file_path, 'r', encoding='utf-8') as file:
-            file_content = file.read()
-            return len(file_content)
-
-def create_backup_directory(existing_dir):
-    """
-    Creates a new directory in the same location as `existing_dir` with a timestamp.
-
-    Parameters:
-        existing_dir (str): The path of the existing directory.
-
-    Returns:
-        str: The path of the new backup directory.
-    """
-    # Get the current timestamp in the required format
-    timestamp = datetime.datetime.now().strftime("%m%d%Y_%H%M%S")
-    
-    # Construct the new directory name
-    new_dir_name = f"{os.path.basename(existing_dir)}_bu_{timestamp}"
-    
-    # Get the parent directory path
-    parent_dir = os.path.dirname(existing_dir)
-    
-    # Full path for the new directory
-    new_dir_path = os.path.join(parent_dir, new_dir_name)
-    
-    # Create the new directory
-    os.makedirs(new_dir_path, exist_ok=True)
-    
-    print(f"Created new directory: {new_dir_path}")
-    return new_dir_path
-
-
-
-def copy_file(file_path, dest_dir):
-    os.makedirs(dest_dir, exist_ok=True)
-    if os.path.isfile(file_path):
-        shutil.copy(file_path, dest_dir)
-
-def remove_json_whitespace(file_path, out_file=None):
-    if out_file == None:
-        out_file = file_path
-    
-    data = load_json_from_file(file_path)
-
-    d = dict_to_said_str(data)
-
-    with open(out_file, 'w') as f:
-        f.write(d)
-    
-  
-def blake3_256_from_dict(dictionary, print_dict=False):
-    '''
-    get blake3_256 byte array from dictionary
-    
-    Parameters:
-     dictionary(str): a keri compliant string 
-     
-    Returns: 
-     -> encoded bytes -> blake3  -> byte array
-    
-    '''
-    if print_dict:
-        print(dict_to_said_str(dictionary).encode('utf-8'))
-    return blake3_to_byte_array(dict_to_said_str(dictionary).encode('utf-8'))
-
-
-def nearest_higher_multiple(x, n):
-    """
-     Calculate the nearest higher multiple of n greater than or equal to x
-    """
-    if x % n == 0:
-        return x
-    else:
-        return ((x // n) + 1) * n
-
-B64_VALUES = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-
-def value_of(ch):
-  return B64_VALUES.index(ch)
-
-def b64_to_int(value):
-  result = 0
-
-  # Iterate over each character in the Base64 string
-  for ch in value:
-      result <<= 6  # Shift left by 6 bits
-      result |= value_of(ch)  # OR with the Base64 value of the character
-
-  return result
-
-def int_to_b64(value, length=4):
-    """
-    Converts an integer to a Base64 string of a specified length using the custom Base64 set.
-    Pads the front with 'A' if necessary to achieve the desired length.
-
-    Parameters:
-        value (int): The integer to convert.
-        length (int): The desired length of the Base64 string.
-
-    Returns:
-        str: The Base64 string representation of the integer, padded to the specified length.
-    """
-    if value < 0 or value >= (1 << (6 * length)):  # Ensure the integer fits in the specified length
-        raise ValueError(f"Integer value out of range for {length} Base64 characters")
-
-    # Convert integer to Base64 characters
-    b64_string = ""
-    for _ in range(length):
-        b64_string = B64_VALUES[value & 0x3F] + b64_string  # Get last 6 bits and prepend character
-        value >>= 6  # Shift value right by 6 bits for the next character
-
-    # If the resulting string is shorter than the desired length, pad with 'A' at the front
-    return b64_string.rjust(length, "A")
-
-
-def calc_pad_bits(byte_array, alignment = 24):
-    """
-     Calculate the pad bits needed to a particular alignment.  
-        Keri/cesr is 24  (3*8): 
-          - https://trustoverip.github.io/tswg-keri-specification/#cesr-encoding
-          - https://kentbull.com/2024/09/22/keri-series-understanding-self-addressing-identifiers-said/ 
-                >> section "24 bit boundary – from Base64"
-    """
-    # get bits in byte_arr
-    bit_num = len(byte_array) * 8
-    # get the pad bits needed based on num of bits in byte array
-    nhm = nearest_higher_multiple(bit_num, alignment)
-    return nhm - bit_num
-  
-  
-def pad_byte_array(byte_array, num_bits, bit_value=0):
-    # ensure bit_value is either 0 or 1
-    if bit_value not in (0, 1):
-        raise ValueError("bit_value must be 0 or 1")
-
-    # calculate full bytes and remaining bits to pad
-    full_bytes, remaining_bits = divmod(num_bits, 8)
-
-    # create the full byte padding
-    pad_byte = 0xFF if bit_value == 1 else 0x00
-    padding = bytes([pad_byte]) * full_bytes
-
-    # if there are remaining bits to pad
-    if remaining_bits > 0:
-        # make a partial byte for the remaining bits
-        partial_byte = (0xFF >> (8 - remaining_bits)) if bit_value == 1 else 0x00
-        partial_byte <<= (8 - remaining_bits)
-        padding += bytes([partial_byte])
-
-    # concatenate the padding and the original byte array
-    return padding + byte_array
-  
-
-def byte_array_to_urlsafe_base64(byte_array):
-    # encode the byte array to a Base64 string
-    base64_str = base64.urlsafe_b64encode(byte_array).decode('utf-8')
-    return base64_str
-
-  
-def substitute_derivation_code(aligned, deriv_code, padded):
-  # each base64 is 6 bits. 
-  # calc prepended base64 chars and remove, then add derivation code.
-  return deriv_code + aligned[padded//6:]
-
-def replace_said_label(d, label, length=44):
-    c = d.copy()
-    if label not in c:
-        return f"ERROR label: {label} does not exist in dict"
-    if len(c[label]) > 0 and len(c[label]) %4 == 0:
-        c[label] = "#" * len(c[label])
-    else:
-        c[label] = "#" *length
-    return c
-
-
-def determine_keri_version(stream):
-    
-    version_1_pattern = r'\{"v":"(KERI|ACDC)[0-9a-f]{2}(JSON|CBOR|MGPK|CESR)[0-9a-f]{6}_"'
-    version_1_pattern_compiled = re.compile(version_1_pattern)
-    
-    version_2_pattern = r'\{"v":"(KERI|ACDC)([A-Za-z0-9_-]{3})(JSON|CBOR|MGPK|CESR)[A-Za-z0-9_-]{4}\."'
-    version_2_pattern_compiled = re.compile(version_2_pattern)
-    # match_v2 = re.search(version_2_pattern_compiled, v_string_candidate)  
-    
-    
-    if is_bytes(stream):
-        stream = stream.decode('utf-8')
-    
-    stream =  stream.replace(' ', '')
-
-    # thing should start with the version string 
-    v_string_candidate = stream[:24]
-    
-    match_v1 = re.search(version_1_pattern_compiled, v_string_candidate)
-    match_v2 = re.search(version_2_pattern_compiled, v_string_candidate)  
-
-    if match_v1 and not match_v2:
-        return 1
-    if match_v2 and not match_v1:
-        return 2
-    if match_v2 and match_v1:
-        return -1 # this is an error, should never happen
-    else:
-        return None
-        
 def collapse(obj, label):
     """
     Recursively collapses nested dictionaries to a specified label if it exists.
@@ -433,185 +50,9 @@ def collapse(obj, label):
 
     return collapsed_obj
         
-def get_version_string_info(v_string, version=1):
-
-    """
-    Parses a version string according to the specified version format for KERI/ACDC standards.
-
-    This function extracts details from a version string based on the CESR specification 
-    (https://trustoverip.github.io/tswg-cesr-specification/#version-string-field). It supports 
-    two versions of the version string format, each with specific terminators and fields.
-
-    Parameters:
-        v_string (str or bytes): The version string to parse, formatted as either:
-             - VERSION 1: `PPPPvvKKKKllllll_` (17 characters, ending with `_`)
-                - PPPP: Protocol (e.g., "KERI" or "ACDC")
-                - vv: Version in lowercase hexadecimal notation (major/minor)
-                - KKKK: Serialization kind (e.g., "JSON", "CBOR", "MGPK", "CESR")
-                - llllll: Size, an integer in lowercase hexadecimal notation
-                - Terminator: `_`
-
-            - VERSION 2: `PPPPVVVKKKKBBBB.` (16 characters, ending with `.`)
-                - PPPP: Protocol (e.g., "KERI" or "ACDC")
-                - VVV: Version (keri Base64-like notation, e.g., "CAA" for 2.00)
-                - KKKK: Serialization kind (e.g., "JSON", "CBOR", "MGPK", "CESR")
-                - BBBB: Size, an integer encoded in Base64 (use `b64_to_int` for decoding)
-                - Terminator: `.`
-           
-        version (int, optional): Specifies the keri Major version format to parse. 
-            Valid options are:
-            - 1: For VERSION 1 format.
-            - 2: For VERSION 2 format.
-            Defaults to 1.
-
-    Returns:
-        dict: A dictionary with parsed components of the version string:
-            - 'protocol' (str): The protocol identifier (e.g., "KERI", "ACDC").
-            - 'version' (str): The version, formatted as a dot-separated string 
-                (e.g., "2.00" for VERSION 2).
-            - 'kind' (str): The serialization type (e.g., "JSON", "CBOR").
-            - '_size' (str): The size field as a string (exact characters from v_string).
-            - 'size' (int): The decoded size value as an integer.
-
-    Raises:
-        ValueError: If an unrecognized `version` is provided or if `v_string` is not a valid 
-                    string or bytes representation.
-
-    Example:
-        >>> get_version_string_info('{"v":"ACDC200JSONAAhK."}', version=2)
-        {'protocol': 'ACDC', 'version': '2.00', 'kind': 'JSON', '_size': 'AAhK', 'size': 2122}
-
-    Notes:
-        - For VERSION 1, hexadecimal size values are converted using `int(_, 16)`.
-        - For VERSION 2, Base64 size values are converted using `b64_to_int`.
-    """
-
-    
-    KNOWN_VERSIONS = [1,2,-1]
-    if version not in KNOWN_VERSIONS:
-         raise ValueError(f"Unrecognized version: '{version}'. Valid options are: {KNOWN_VERSIONS}")
-    
-    if not is_string(v_string):
-        v_string = v_string.decode()
-    
-    v_string = v_string.replace('"', '')
-    ## detect version from stop delim
-    if version == -1:
-        if v_string.endswith('.'):
-            version = 2
-        elif v_string.endswith('_'):
-            version = 1
-        else:
-            raise ValueError(f"Unrecognized version: '{version}'. {v_string}")
-    if version == 1:
-        stop_delim = v_string.index('_')
-        major = int(v_string[4], 16)
-        minor = int(v_string[5], 16)
-        
-        _protocol = v_string[0:4]
-        _version = str(major) + '.' + str(minor)
-        _kind = v_string[6:10]
-        _size = v_string[10:stop_delim]
-        _size_length =int(_size, 16)
-    
-
-    elif version == 2:
-        stop_delim = v_string.index('.')
-        minorv = 0
-        for c in v_string[5:7]:
-            minorv += value_of(c)
-        
-        _protocol = v_string[0:4]
-        _version = str(value_of(v_string[4])) + '.' + str(minorv)
-        _kind = v_string[7:11]
-        _size = v_string[11:stop_delim]
-        _size_length =b64_to_int(_size)
-    return {
-      'protocol': _protocol,
-      'version': _version,
-      'kind': _kind, # serial
-      '_size': _size, # digits
-      'size': _size_length
-    }
 
 
-def is_dict(obj):
-    return isinstance(obj, dict)
-
-def set_v_field_length(data: dict, major):
-    len_data = deepcopy(data)
-    if major == 1:
-        len_data['v'] = '#'*17
-    elif major == 2:
-        len_data['v'] = '#'*16
-    return len(dict_to_said_str(len_data))
-
-def build_version(data, protocol, kind = 'JSON', major=1, minor=0):
-    length = None
-    if not is_bytes(data) and not is_string(data) and is_dict(data):
-        length = set_v_field_length(data, major)
-        
-    elif is_bytes(data):
-        data = data.decode('utf-8')
-        data = json.load(data)
-        length = set_v_field_length(data, major)
-        
-    elif is_string(data):
-        data = json.load(data)
-        length = set_v_field_length(data, major)
-    
-    
-
-    if len(protocol) != 4:
-        raise ValueError(f"protocol must be 4 characters: {protocol}: {len(protocol)}")
-
-    if major == 2:
-        # PPPPVVVKKKKBBBB.
-        major_rep = int_to_b64(major)[-1]
-        minor_rep = int_to_b64(minor)[:-2]
-
-        if len(str(minor_rep)) < 2:
-            minor_rep = 'A' + minor_rep
-        version_rep = major_rep + minor_rep
-        size = int_to_b64(length)
-        if len(size) < 4:
-            size = 'A' * (4 - len(size)) + size
-
-        return f"{protocol}{version_rep}{kind}{size}."
-    
-        
-    else:
-        #  version 1
-        # PPPPvvKKKKllllll_
-        if major == -1:
-            major = 1
-        major_rep = hex(major)[2:]
-        
-        minor_rep = hex(minor)[2:]
-        version_rep = major_rep + minor_rep
-        size = f"{length:06x}"
-        return f"{protocol}{version_rep}{kind}{size}_"
-    
-
-
-def vIsFirst(data, key='v'):
-    """
-    Checks if the specified key is the first key in the dictionary.
-
-    Parameters:
-        data (dict): The dictionary to check.
-        key: The key to check if it's at index 0. Defaults to 'v'.
-
-    Returns:
-        bool: True if the specified key is the first key, False otherwise.
-    """
-    if not isinstance(data, dict):
-        raise ValueError("Input data must be a dictionary.")
-    
-    keys = list(data.keys())
-    return keys[0] == key if keys else False
-
-def mapPathsToLabel(data, label='d'):
+def map_paths_to_label(data, label='d'):
     """
     Recursively finds paths to all leaves with a specified label in a nested dictionary or list.
 
@@ -691,7 +132,7 @@ def find_value_in_dict(data, target, current_path=()):
                     return result
     return None
 
-def getNestedObjectAndParent(data, path):
+def get_nested_object_and_parent(data, path):
     """
     Retrieves a nested object and its parent from a dictionary or list by following a path represented by a list of keys.
 
@@ -721,7 +162,7 @@ def getNestedObjectAndParent(data, path):
 
     return parent, current
 
-def replaceNestedObject( data:dict, path:list, new_obj):
+def replace_nested_object( data:dict, path:list, new_obj):
     """
     Replaces a nested object within a dictionary or list with a new object, based on a specified path,
     without compacting any part of the structure.
@@ -756,31 +197,6 @@ def replaceNestedObject( data:dict, path:list, new_obj):
 
     return True
 
-def deepcopy(data:dict):
-        """
-        Recursively creates a deep copy of a dictionary or list structure.
-
-        Parameters:
-            data (dict, list): The original dictionary or list to deep copy.
-
-        Returns:
-            A deep copy of the input data.
-        """
-        if isinstance(data, dict):
-            # Recursively deep copy each key-value pair in the dictionary
-            return {key: deepcopy(value) for key, value in data.items()}
-        elif isinstance(data, list):
-            # Recursively deep copy each element in the list
-            return [deepcopy(element) for element in data]
-        else:
-            # For primitive types (int, str, float, etc.), return the value directly
-            return data
-
-def equal_in_list(e, _list):
-    for i in _list:
-        if e == i:
-            return True
-    return False
 
 
 ## Simple version full said.  no recursion
@@ -823,7 +239,7 @@ def get_said(data, label='d', version=None ):
         sad =  replace_said_label(sad, 'i')
 
     ## calc and get version string if there
-    if is_dict(sad) and 'v' in data and vIsFirst(data):
+    if is_dict(sad) and 'v' in data and v_is_first(data):
         data_byte_str = dict_to_said_str(data)
         if version == None:
             version = determine_keri_version(data_byte_str)
@@ -911,7 +327,7 @@ def saidify(sad, label='d', version= -1, compactify=False):
     def pathJoin(a):
         return '.'.join(map(str, a))
 
-    paths = mapPathsToLabel(sad_, label=label)  # Map paths to the specified label
+    paths = map_paths_to_label(sad_, label=label)  # Map paths to the specified label
     non_compact = deepcopy(sad_)#.copy()
     compact = deepcopy(sad_)#.copy()
     sads = {}
@@ -919,7 +335,7 @@ def saidify(sad, label='d', version= -1, compactify=False):
     
 
     for path in paths:
-        parent, current = getNestedObjectAndParent(compact, path)
+        parent, current = get_nested_object_and_parent(compact, path)
 
         if parent is None or current is None:
             continue
@@ -934,14 +350,14 @@ def saidify(sad, label='d', version= -1, compactify=False):
         sads[tuple(path)] = _sad[1]
         
         # Update `non_compact` only at the specific field level
-        replaceNestedObject(non_compact, path, _sad[0])
+        replace_nested_object(non_compact, path, _sad[0])
         if path == [label]:
             if 't' in  non_compact and equal_in_list(non_compact['t'], ['icp', 'dip', 'vcp']):
                 non_compact['i'] = _sad[0]
         
         # For `compact`, replace the entire nested structure as per SAID path requirements
         if len(path[:-1]) > 0:
-            replaceNestedObject(compact, path[:-1], _sad[0])
+            replace_nested_object(compact, path[:-1], _sad[0])
         else:
             compact = _sad[1]
 
@@ -1009,7 +425,7 @@ def saidify(sad, label='d', version= -1, compactify=False):
     }
 
 def build_version_string(data, major = None):
-    if 'v' in data and vIsFirst(data):
+    if 'v' in data and v_is_first(data):
         if major is None:
             major = determine_keri_version(dict_to_keri_byte_str(data))
         v_info = get_version_string_info(data['v'], major)
@@ -1022,46 +438,6 @@ def build_version_string(data, major = None):
         )
     return None
 
-def keri_blake256_data(data):
-    if is_dict:
-        data = dict_to_keri_byte_str(data)
-    if is_string(data):
-        data = data.encode()
-    blake3_byte_arr = blake3_to_byte_array(data)
-    to_pad = calc_pad_bits(blake3_byte_arr,24)
-    aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
-    b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
-    said = substitute_derivation_code(b64_digest, 'E', to_pad)
-    return said
-
-# determine_keri_version(stream)
-def get_blake3_256_said(data, label, debug=False):
-    data_2 = replace_said_label(data, label)
-    v_string = build_version_string(data)
-    if v_string is not None:
-        data_2['v'] = v_string
-    blake3_byte_arr = blake3_256_from_dict(data_2, debug)
-    to_pad = calc_pad_bits(blake3_byte_arr,24)
-    aligned_arr = pad_byte_array(blake3_byte_arr, to_pad, 0)
-    b64_digest = byte_array_to_urlsafe_base64(aligned_arr)
-    said = substitute_derivation_code(b64_digest, 'E', to_pad)
-    said2 = keri_blake256_data(data_2)
-    return said, v_string
-  
-def update_v2string_length(ked):
-    _raw = dict_to_keri_byte_str(ked)
-    _size = len(_raw)
-    size_b64 = int_to_b64(_size)
-    v_string = ked['v'][:-5] + size_b64 + '.'
-    return v_string
-
-def update_v1string_length(ked):
-    _raw = dict_to_keri_byte_str(ked)
-    _size = len(_raw)
-    size = f"{_size:06x}"
-    v_string = ked['v']
-    v_string = v_string[:10] + size + '_'
-    return v_string
 # ==================================== SIMPLE DECOMPACTIFY ( iterative ) =================================================
 
 ## construct a partial, given a list of paths and all the compact sads.
@@ -1130,33 +506,30 @@ def construct_partial(paths, sads, label):
             root_ked = deepcopy(sads[sad])
     
     
-    ## TODO Fix, only root level aggregated A field handeled.
-    has_agg_paths = False
-    for p in paths:
-        if 'A' in p:
-            has_agg_paths = True
-    print(paths)
-    if has_agg_paths:
-        print(has_agg_paths)
-        expanded_agg = []
-        for p in sads:
-            if len(p) <= 2 and p[0] == 'A':
-                expanded_agg.append(sads[p])
+    # ## TODO Fix, only root level aggregated A field handeled.
+    # has_agg_paths = False
+    # for p in paths:
+    #     if 'A' in p:
+    #         has_agg_paths = True
+    # # print(paths)
+    # if has_agg_paths:
+    #     # print(has_agg_paths)
+    #     expanded_agg = []
+    #     for p in sads:
+    #         if len(p) <= 2 and p[0] == 'A':
+    #             expanded_agg.append(sads[p])
             
-        root_ked['A'] = expanded_agg
+    #     root_ked['A'] = expanded_agg
     # sort from shortest to longest, just because
     paths = sorted(paths, key=len)
-    print(paths)
+    # print(paths)
     for path in paths:
+        # print(path)
+        # print(root_ked)
         root_ked = simple_decompactify(path, sads, label,root_ked)
     return root_ked
     
-def vIsFirst(data, key='v'):
-    if not isinstance(data, dict):
-        raise ValueError("Input data must be a dictionary.")
-    
-    keys = list(data.keys())
-    return keys[0] == key if keys else False
+
     
 def simple_decompactify(path, all_sads, label,root_ked = {}):
     """
@@ -1172,7 +545,8 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
     """    
     if root_ked == {}:
         for sad in all_sads:
-            sad_path
+            sad_path = sad
+
             if label == sad_path[0]:
                 rk = deepcopy(all_sads[sad])
                 root_ked = deepcopy(rk)
@@ -1185,7 +559,7 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
     for key in path:
         match_path.append(key)
         if key == label:
-            if vIsFirst(root_ked):
+            if v_is_first(root_ked):
                 v_version = 1 if root_ked['v'].endswith('_') else 2
                 if v_version == 1:
                     root_ked['v'] = update_v1string_length(root_ked)
@@ -1194,22 +568,27 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
             return root_ked
         current_obj = root_ked
         for p in match_path:
+        #   print(p)
           if p in current_obj:
             if isinstance(current_obj[p], (dict, list)):
               if p == 'A':
+                #   print(1200)
+                #   print(current_obj)
                   if 'A' in current_obj:
+                    #   print(1202)
                       if A in current_obj['A']:
                           current_obj['A'].remove(A)
                   elif A in current_obj:
-                      print(1206)
+                    #   print(1206)
                       current_obj.remove(A)
               current_obj  = current_obj[p]
               continue
             else:
+            #   print(1212)
               ## find sad that matches:
               for sad in all_sads:
                 if p == 'A' and path[-1] != 'A':
-                    continue
+                  continue
                 sad_path = sad
                 if sad_path[:-1] ==  tuple(match_path):
                   current_obj[p] = deepcopy(all_sads[sad])
@@ -1217,15 +596,22 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
               
               continue
           else:
+            # print(605)
+
             # print(p, match_path)
+            ## TODO FIX: HACKY A field fill.
+            if p == '...':
+                for sad in all_sads:
+                    if sad == tuple(match_path):
+                        current_obj[match_path[-2]] = all_sads[sad]
+                        break
+            
             for sad in all_sads:
               sad_path = sad
-              if p == 'A' and path[-1] != 'A':
-                  continue
               if sad_path[:-1] ==  tuple(match_path):
-                
                 if not isinstance(current_obj[p], dict):
                     if 'A' in path:
+                        # print(1235)
                         if A in current_obj:
                             current_obj.remove(A)
                     current_obj[p] = deepcopy(all_sads[sad])
@@ -1233,7 +619,7 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
                     current_obj = current_obj[p]
                 break
         
-    if vIsFirst(root_ked):
+    if v_is_first(root_ked):
         root_ked['v']  = update_v2string_length(root_ked)
     return root_ked                
 
@@ -1261,6 +647,7 @@ def disclosure_by_saids(expanded, saids, label='d'):
     dict
         A partially decompactified SAD structure where the specified SAIDs are expanded.
     """
+
     paths = []
     not_found = []
     for said in saids:
@@ -1270,15 +657,138 @@ def disclosure_by_saids(expanded, saids, label='d'):
         if p is None:
             not_found.append(said)
     
- 
-    s = saidify(expanded, label=label, compactify=True)
+    # s = saidify(expanded, label=label, compactify=True)
+    s = recursive_saidify(expanded, label=label)#, compactify=True)
     if len(not_found):
         # pass
         for nf in not_found:
             for p in s['saiders']:
                 if s['saiders'][p] == nf:
                     paths.append(p)
-        
+                    
+    def exists_in_tuple_list(_list, value):
+        for tup in _list:
+            if value in tup:
+                return True
+        return False
+    
+    def find_start_indexes_tuple_list(_list, value):
+        start_indexes = []
+        for tup in _list:
+            if value in tup:
+                i = tup.index(value)
+                if i not in start_indexes:
+                    start_indexes.append(i)
+        return start_indexes
+    
     sads = s['sads']
+    if exists_in_tuple_list(paths, 'A') and not exists_in_tuple_list(paths, '...'):
+        expanded_A_paths = []
+        start_indexes = find_start_indexes_tuple_list(paths, 'A')
+        for s in start_indexes:
+            for p in sads:
+                # print(p, len(p) >= s+2)
+
+                if len(p) >= s+2:
+                    if p[s] == 'A' and p[s+1] == '...':
+                        expanded_A_paths.append(p)
+                
+        paths = paths + expanded_A_paths
+            
+        
+    # print(paths)
+   
     exposed = construct_partial(paths, sads, label)
     return exposed
+
+def recursive_saidify(sad, label, debug=False):
+        """
+        Recursively replaces the 'label' values with SAIDs and collapses special 'A' fields 
+        such that all 'A' fields are resolved before calculating parent SAIDs.
+
+        Parameters:
+            sad (dict): The input dictionary.
+            label (str): The target field to replace with SAIDs.
+            debug (bool): Enables debug output.
+
+        Returns:
+            saids: (dict: (tuple: path) said string): Updated dictionary with SAID replacements and 'A' field collapses.
+            sads: (dict: (tuple: path)) SADs, fully compacted.
+            report: (dict {path: tuple (valid:bool, calculated said: str, original said: str)})
+            paths: (list of tuples) paths of all the SAIDs and or SADs
+            valid: (bool) True if all calculated saids match saids provided in data.
+            compact: (dict): most compact form of SAD possible.
+        """
+        sads = {}        # SAID mappings
+        saiders = {}     # SAID raw data
+        report = {}      # SAID valid report by path
+        paths = []       # all sad - saider paths
+        valid = True     # True if all saids match calculation
+        
+
+        def process_special_a_field(data, path):
+            """Collapse an 'A' field into its concatenated hash."""
+            if isinstance(data, list):
+                exp_path = path + ('...',)
+                sads[exp_path] = data
+                paths.append(exp_path)
+                concatenated = ''.join(data)
+                hashed = keri_blake256_data(concatenated)  # Replace with the correct hash function
+                sads[path] = hashed
+                return hashed
+            return data
+
+        def recurse(data, path=()):
+            """Post-order recursive function to process 'A' fields and SAIDs."""
+            if isinstance(data, dict):
+                updated = {}
+
+                # Process children first (post-order traversal)
+                for key, value in data.items():
+                    current_path = path + (key,)
+                    updated[key] = recurse(value, current_path)
+
+                # Collapse the 'A' field, if present
+                if "A" in updated:
+                    special_path = path + ("A",)
+                    updated["A"] = process_special_a_field(updated["A"], special_path)
+                    if debug:
+                        print(f"Collapsed 'A' field at path {special_path}: {updated['A']}")
+
+                # Replace the label and calculate its SAID
+                if label in updated:
+                    said = get_said(updated, label)
+                    path = path + (label,)
+                    paths.append(path)
+                    sads[path] = said[1]
+                    saiders[path] = said[0]
+                    report[path] = (said[-1], said[0], updated[label])
+                    if said[-1] == False:
+    
+                        nonlocal valid
+                        valid = False
+                    updated = said[0]  # Replace the entire dict with its SAID version
+                    if debug:
+                        print(f"Replaced label '{label}' at path {path} with SAID: {said[1]}")
+
+                return updated
+
+            elif isinstance(data, list):
+                return [recurse(item, path + (i,)) for i, item in enumerate(data)]
+
+            else:
+                return data
+
+        # Start processing with a deepcopy of the input
+        _sad = deepcopy(sad)
+        updated_data = recurse(_sad)
+
+        return {
+            "said": updated_data,
+            "sads": sads,
+            "saiders": saiders,
+            "report": report,
+            "paths": paths,
+            "valid": valid,
+            "compact": sads[(label,)]
+        }
