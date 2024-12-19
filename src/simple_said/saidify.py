@@ -20,9 +20,7 @@ from simple_said.kutils import (
     v_is_first
     )
 
-
 import pprint
-
 
 pp = pprint.PrettyPrinter(indent=2, sort_dicts=False)
 
@@ -161,41 +159,6 @@ def get_nested_object_and_parent(data, path):
             return None, None
 
     return parent, current
-
-def replace_nested_object( data:dict, path:list, new_obj):
-    """
-    Replaces a nested object within a dictionary or list with a new object, based on a specified path,
-    without compacting any part of the structure.
-
-    Parameters:
-        data (dict or list): The original data (dictionary or list) to modify.
-        path (list): A list of keys/indices representing the path to the nested object to replace.
-        new_obj: The new object to insert at the specified path.
-
-    Returns:
-        bool: True if replacement was successful, False otherwise.
-    """
-    current = data
-    for key in path[:-1]:  # Traverse to the parent of the target location
-        if isinstance(current, dict) and key in current:
-            current = current[key]
-        elif isinstance(current, list) and isinstance(key, int) and 0 <= key < len(current):
-            current = current[key]
-        else:
-            # Path is not valid, return False to indicate no replacement was made
-            return False
-
-    # Replace the target object if the final key/index exists in the current structure
-    final_key = path[-1]
-    if isinstance(current, dict) and final_key in current:
-        current[final_key] = new_obj
-    elif isinstance(current, list) and isinstance(final_key, int) and 0 <= final_key < len(current):
-        current[final_key] = new_obj
-    else:
-        # If path is invalid for replacement, return False
-        return False
-
-    return True
 
 
 
@@ -438,99 +401,58 @@ def build_version_string(data, major = None):
         )
     return None
 
-# ==================================== SIMPLE DECOMPACTIFY ( iterative ) =================================================
-
-## construct a partial, given a list of paths and all the compact sads.
-def construct_partial(paths, sads, label):
+def construct_partial(requested_paths, ked, said_label='d', agg_label='A'):
+    saidified = recursive_saidify(ked, label = said_label, debug=False, non_compacted=False)
+    all_sads_paths = saidified['paths']
+    all_sads = saidified['sads']
+    required_paths = map_required_paths(requested_paths, all_sads_paths, said_label, agg_label)
+    partial = {}
+    for path in required_paths:
+        partial = replace_nested_object(partial,path, all_sads[path])
+    return partial
+   
+def find_path_in_dict(data, path):
     """
-    Construct a partial decompacted version of a Self-Addressing Data (SAD) structure.
-
-    This function selectively reveals nested components of a compacted SAD structure 
-    based on the specified paths. It progressively decompacts parts of the SAD while 
-    keeping the rest compact. This is useful for revealing specific parts of a SAD 
-    without exposing the full data structure.
+    Checks if a given path exists in a nested dictionary.
 
     Parameters:
-    ----------
-    paths : list of lists
-        A list of paths, where each path is a list of keys that identify a nested
-        element in the SAD. The paths specify which parts of the compacted SAD
-        to reveal.
-    sads : dict
-        A dictionary of compacted SADs, typically generated from the `saidify` function.
-        The keys represent paths to nested components, and the values are the corresponding
-        SAD objects.
-    label : str
-        The field name in the SAD used as the SAID label (e.g., 'd').
+        data (dict): The dictionary to search.
+        path (list or tuple): The path to search for.
 
     Returns:
-    -------
-    dict
-        A partially decompacted SAD structure, where the specified paths have been
-        expanded to reveal their nested content.
-
-    Notes:
-    -----
-    - The function retrieves the root SAD from the `sads` dictionary using the label field.
-    - The paths are sorted by length to ensure hierarchical decompaction.
-    - For each path, the SAD is progressively decompacted by revealing the nested
-      structure up to the specified depth.
-    - If a path ends in the label (e.g., `['e', 'other', 'd']`), it is treated as equivalent
-      to `['e', 'other']`.
-
-    Example:
-    --------
-    Given the following SADs from `saidify` and paths to reveal:
-    >>> to_reveal = [['e'], ['r', 'Purpose']]
-    >>> partial = construct_partial(to_reveal, saidified['sads'], saidified['label'])
-
-    The resulting `partial` SAD will look like this:
-    >>> pp.pprint(partial)
-    { 'v': 'ACDC10JSON00AAJ9.',
-      'd': 'EBtlmHmvTAaT4Fk7OOLz8Lbj0-RRk-CcuAWJqqcM8zUW',
-      'i': 'did:keri:EmkPreYpZfFk66jpf3uFv7vklXKhzBrAqjsKAn2EDIPM',
-      's': 'EGGeIZ8a8FWS7a646jrVPTzlSkUPqs4reAXRZOkogZ2A',
-      'a': 'EAlRl3pCPbtOWUz_O4xWpEJJrsMhQwjmIwLmXtxWz-fu',
-      'e': { 'd': 'ELklZ5xoxJV9w2mEantpo58a76OMp5Cby2S0gk2gU41F',
-             'other': 'ENZyhiv9penkbqBqblRpBYTznwf3h84uHh93s_e77A7t'},
-      'r': { 'd': 'EGP6QI5LL1X9unCUymIwtQRjp9p4r_loUgKdymVpn_VG',
-             'Purpose': { 'd': 'EOF9OZMZudCRFDU_AmJWY7Py3KdazRsGnbEz-QIQ7HJj',
-                          'l': 'One-time admittance of Issuer by Issuee to eat '
-                               'at place on date as specified in Attribute '
-                               'section.'}}}
+        tuple:
+            - (bool): True if path exists, False otherwise.
+            - (tuple): The farthest matching path.
+            - (dict/any): The dictionary or value at the farthest path.
     """
-    # GET ROOT KED ( COMAPCITIFED ) 
-    for sad in sads:
-        sad_path = sad
-        if sad_path[0] == label:
-            root_ked = deepcopy(sads[sad])
-    
-    
-    # ## TODO Fix, only root level aggregated A field handeled.
-    # has_agg_paths = False
-    # for p in paths:
-    #     if 'A' in p:
-    #         has_agg_paths = True
-    # # print(paths)
-    # if has_agg_paths:
-    #     # print(has_agg_paths)
-    #     expanded_agg = []
-    #     for p in sads:
-    #         if len(p) <= 2 and p[0] == 'A':
-    #             expanded_agg.append(sads[p])
-            
-    #     root_ked['A'] = expanded_agg
-    # sort from shortest to longest, just because
-    paths = sorted(paths, key=len)
-    # print(paths)
-    for path in paths:
-        # print(path)
-        # print(root_ked)
-        root_ked = simple_decompactify(path, sads, label,root_ked)
-    return root_ked
-    
+    current = data
+    matched_path = []
+    # print(496)
+    # print(data)
+    for i, key in enumerate(path):
+        if isinstance(current, dict) and key in current:
+            current = current[key]
+            matched_path.append(key)
+        elif isinstance(current, list) and isinstance(key, int) and 0 <= key < len(current):
+            current = current[key]
+            matched_path.append(key)
+        else:
+            # Path does not exist beyond this point
+            return False, tuple(matched_path), current
 
-    
+    # Full path exists
+    return True, tuple(matched_path), current
+ 
+
+
+def find_overlapping_paths(base_path, paths):
+    overlapping_paths = []
+    for path in paths:
+        if path[:len(base_path)] == base_path:
+            overlapping_paths.append(path)
+    return overlapping_paths
+              
+
 def simple_decompactify(path, all_sads, label,root_ked = {}):
     """
     Rebuilds a nested structure recursively by adding compactified versions
@@ -567,7 +489,7 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
                     root_ked['v']  = update_v2string_length(root_ked)
             return root_ked
         current_obj = root_ked
-        for p in match_path:
+        for mi, p in enumerate(match_path):
         #   print(p)
           if p in current_obj:
             if isinstance(current_obj[p], (dict, list)):
@@ -596,9 +518,6 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
               
               continue
           else:
-            # print(605)
-
-            # print(p, match_path)
             ## TODO FIX: HACKY A field fill.
             if p == '...':
                 for sad in all_sads:
@@ -609,6 +528,13 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
             for sad in all_sads:
               sad_path = sad
               if sad_path[:-1] ==  tuple(match_path):
+                if p not in current_obj:
+                    if path[mi+1] == '...' and p == 'A':
+                        k = match_path[-1]
+                        current_obj[k] = []
+                        # current_obj[k] = all_sads[path[:mi+1]]
+
+                    
                 if not isinstance(current_obj[p], dict):
                     if 'A' in path:
                         # print(1235)
@@ -621,8 +547,7 @@ def simple_decompactify(path, all_sads, label,root_ked = {}):
         
     if v_is_first(root_ked):
         root_ked['v']  = update_v2string_length(root_ked)
-    return root_ked                
-
+    return root_ked 
 
 def disclosure_by_saids(expanded, saids, label='d'):
     """
@@ -658,8 +583,12 @@ def disclosure_by_saids(expanded, saids, label='d'):
             not_found.append(said)
     
     # s = saidify(expanded, label=label, compactify=True)
-    s = recursive_saidify(expanded, label=label)#, compactify=True)
+    s = recursive_saidify(expanded, label=label, non_compacted= False)#, compactify=True)
+    all_paths = s['paths']
+    exp = deepcopy(expanded)
     if len(not_found):
+        print('not_found')
+        print(not_found)
         # pass
         for nf in not_found:
             for p in s['saiders']:
@@ -687,21 +616,44 @@ def disclosure_by_saids(expanded, saids, label='d'):
         start_indexes = find_start_indexes_tuple_list(paths, 'A')
         for s in start_indexes:
             for p in sads:
-                # print(p, len(p) >= s+2)
-
                 if len(p) >= s+2:
                     if p[s] == 'A' and p[s+1] == '...':
                         expanded_A_paths.append(p)
                 
         paths = paths + expanded_A_paths
-            
-        
-    # print(paths)
-   
-    exposed = construct_partial(paths, sads, label)
-    return exposed
 
-def recursive_saidify(sad, label, debug=False):
+    required_paths = map_required_paths(paths, all_paths,label)
+    partial = construct_partial(required_paths, exp, label)
+    
+    ## updated version string
+    partial = update_vstring(partial)
+            
+    
+    return partial
+
+def update_vstring(ked):
+    if v_is_first(ked):
+        major = determine_keri_version(dict_to_keri_byte_str(ked))
+        if major == 1:
+            v_string = update_v1string_length(ked)
+        elif major == 2:
+            v_string = update_v2string_length(ked)
+        else:
+            raise ValueError(f"Unrecognized version {ked['v']}")
+        ked['v'] = v_string
+    return ked
+
+def construct_non_compact(paths, sads, said_label, agg_label):
+    non_compact = {}
+    required_paths = map_required_paths(paths, paths, said_label, agg_label)
+    for path in required_paths:
+        non_compact = replace_nested_object(non_compact,path, sads[path])
+    ## updated version string
+    non_compact = update_vstring(non_compact)
+    return non_compact
+
+def recursive_saidify(sad, label='d',agg_label='A', non_compacted = True, debug=False):
+        # pp.pprint(sad)
         """
         Recursively replaces the 'label' values with SAIDs and collapses special 'A' fields 
         such that all 'A' fields are resolved before calculating parent SAIDs.
@@ -724,9 +676,10 @@ def recursive_saidify(sad, label, debug=False):
         report = {}      # SAID valid report by path
         paths = []       # all sad - saider paths
         valid = True     # True if all saids match calculation
+        non_compact = None
         
 
-        def process_special_a_field(data, path):
+        def process_agg_a_field(data, path):
             """Collapse an 'A' field into its concatenated hash."""
             if isinstance(data, list):
                 exp_path = path + ('...',)
@@ -735,6 +688,7 @@ def recursive_saidify(sad, label, debug=False):
                 concatenated = ''.join(data)
                 hashed = keri_blake256_data(concatenated)  # Replace with the correct hash function
                 sads[path] = hashed
+                saiders[path] = hashed
                 return hashed
             return data
 
@@ -750,10 +704,10 @@ def recursive_saidify(sad, label, debug=False):
 
                 # Collapse the 'A' field, if present
                 if "A" in updated:
-                    special_path = path + ("A",)
-                    updated["A"] = process_special_a_field(updated["A"], special_path)
+                    agg_path = path + ("A",)
+                    updated["A"] = process_agg_a_field(updated["A"], agg_path)
                     if debug:
-                        print(f"Collapsed 'A' field at path {special_path}: {updated['A']}")
+                        print(f"Collapsed 'A' field at path {agg_path}: {updated['A']}")
 
                 # Replace the label and calculate its SAID
                 if label in updated:
@@ -783,6 +737,10 @@ def recursive_saidify(sad, label, debug=False):
         _sad = deepcopy(sad)
         updated_data = recurse(_sad)
 
+        if non_compacted:
+            non_compact = construct_non_compact(paths, sads, label, agg_label)
+            non_compact = update_vstring(non_compact)
+
         return {
             "said": updated_data,
             "sads": sads,
@@ -790,5 +748,177 @@ def recursive_saidify(sad, label, debug=False):
             "report": report,
             "paths": paths,
             "valid": valid,
-            "compact": sads[(label,)]
+            "compact": sads[(label,)],
+            'non_compact': non_compact,
         }
+        
+def get_label_indices(path, label):
+    return [i for i, element in enumerate(path) if element == label]
+
+def map_required_paths(requested_paths, all_sads_paths, said_label='d', agg_label='A'):
+    """
+    Maps the required paths based on requested paths, dependencies on parent paths, and special list fields.
+
+    Parameters:
+        requested_paths (list of tuples): List of requested paths to expose.
+        all_sads_paths (list of tuples): List of all valid paths available in SADs.
+        said_label (str): The label representing the SAID field.
+        agg_label (str): The label representing special aggregate fields (e.g., 'A').
+
+    Returns:
+        list of tuples: List of required paths sorted by depth (shortest to longest).
+    """
+    required_paths = []
+
+    # Always include the root path
+    required_paths.append(tuple(said_label,))
+    # print('reqi')
+    # print(required_paths)
+
+    def add_parent_paths(path):
+        """Add all parent paths up to the root."""
+        for i in range(1, len(path) + 1):
+            parent_path = path[:i]
+            if parent_path in all_sads_paths:
+                required_paths.append(parent_path)
+    def find_path(path, all_sads_paths):
+        
+        if path in all_sads_paths:
+            return path
+        raise ValueError(f"{path} not found in paths")
+
+    def sort_paths_with_said_label(paths, said_label):
+        """
+        Sorts paths based on length, prioritizing the path containing the said label 
+        within groups of the same length.
+    
+        Parameters:
+            paths (list of tuples): The list of paths to sort.
+            said_label (str): The label to prioritize.
+    
+        Returns:
+            list of tuples: Sorted paths.
+        """
+        return sorted(
+            paths,
+            key=lambda path: (len(path), 0 if said_label in path else 1, path)
+        )
+
+
+                
+    def find_needed_said_parents(path, all_paths,said_label, agg_label):
+        needed_parent_said_paths = [path]
+        for i,elem in enumerate(path):
+            if i == 0:
+                continue
+            elif elem == agg_label:
+                child = path[:i+1] + ('...',)
+                needed_parent_said_paths.append(find_path(child,all_paths))
+                said_dependent_path = path[:i] + (said_label,)
+                needed_parent_said_paths.append(find_path(said_dependent_path,all_paths))
+                      
+            elif elem == '...':
+                continue
+            elif isinstance(elem, int):
+                # check if previous is special
+                if i > 0 and path[i-1] == agg_label:
+                    parent_candidate = path[:i] + ('...',)
+                    if parent_candidate in all_paths:
+                        needed_parent_said_paths.append(parent_candidate)
+                    else:
+                        print(path[:i-1])
+                        raise ValueError(f"{path} not found in paths")
+            elif elem != said_label:
+                agg_smudge_factor = 0
+                candidate_parent = None
+                if elem == agg_label and i+1 == len(path):
+                    agg_smudge_factor += 1
+                need_said_label_at_index = i + agg_smudge_factor           
+                match_path = path[:need_said_label_at_index]
+                for _p in all_paths:
+                    if len(_p)-1+agg_smudge_factor == need_said_label_at_index:
+                        if _p[need_said_label_at_index-agg_smudge_factor] == said_label:
+                            if match_path[-1] == agg_label:
+                                match_path = match_path[:-1]
+                            if _p[:-1] == match_path:
+                                candidate_parent = _p
+                if candidate_parent is None:
+                    print(86, 'not found', elem)
+                else:
+                    if candidate_parent not in needed_parent_said_paths:
+                        needed_parent_said_paths.append(candidate_parent)
+        needed_parent_said_paths = sorted(needed_parent_said_paths, key=len)
+        needed_parent_said_paths = sort_paths_with_said_label(needed_parent_said_paths, said_label)
+        return needed_parent_said_paths
+        
+    # Process each requested path
+    expanded_paths = [(said_label,)]
+    for requested_path in requested_paths:
+        last_k = requested_path[-1]
+        if not isinstance(last_k, int) and last_k not in (said_label, agg_label, '...'):
+            requested_path = requested_path + tuple(said_label,)
+        expanded_paths.append(requested_path)
+        add_parent_paths(requested_path)
+        needed = find_needed_said_parents(requested_path,all_sads_paths,said_label,agg_label)
+        expanded_paths = list(set(expanded_paths + needed))
+        expanded_paths = sort_paths_with_said_label(expanded_paths, said_label)
+    
+    expanded_paths = sort_paths_with_said_label(expanded_paths, said_label)
+    return expanded_paths
+
+
+def replace_nested_object(data, path, new_obj, label = 'd', special = 'A', debug=False):
+    """
+    Replaces a nested object within a dictionary or list with a new object,
+    based on a specified path.
+
+    Parameters:
+        data (dict or list): The original data structure.
+        path (tuple): The path to the location where the object should be replaced.
+        new_obj: The new object to insert at the specified path.
+        debug (bool): Enables debug output.
+
+    Returns:
+        dict: Updated data structure.
+    """
+    current = data
+    smudge_factor = 0
+    if path[-1] == label or path[-1] == '...':
+        smudge_factor = 1
+    if path == tuple(label):
+        return new_obj
+    
+    if debug:
+        print(f"Attempting to replace path: {path}")
+        print(f"Current structure before replacement: {data}")
+    for key in path[:-1-smudge_factor]:  # Traverse to the parent of the target location
+        if isinstance(current, dict):
+            if key not in current:
+                current[key] = {}  # Create missing dictionaries as needed
+            current = current[key]
+        elif isinstance(current, list) and isinstance(key, int) and 0 <= key < len(current):
+            current = current[key]
+        else:
+            raise TypeError(f"Invalid path element '{key}' in path {path}")
+
+    # Replace or insert the new object at the final key
+    final_key = path[-1-smudge_factor]
+    if isinstance(current, dict):
+        current[final_key] = new_obj
+    elif isinstance(current, list) and isinstance(final_key, int) and 0 <= final_key < len(current):
+        current[final_key] = new_obj
+    else:
+        if final_key == '...':
+            this_key = path[-2]
+            if this_key in current:
+                current[key] = new_obj
+        else:
+            print(data)
+            print(current)
+            print(key)
+            raise TypeError(f"Invalid path element '{final_key}' in path {path}")
+
+    if debug:
+        print(f"Updated structure after replacement: {data}")
+
+    return data
