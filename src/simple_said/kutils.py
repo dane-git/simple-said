@@ -482,3 +482,9 @@ def v_is_first(data, key='v'):
     
     keys = list(data.keys())
     return keys[0] == key if keys else False
+
+
+
+def make_bit_str(num, length=8):
+    s = f"{num:0{length}b}"
+    return s
