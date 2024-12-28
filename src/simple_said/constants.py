@@ -1,3 +1,4 @@
+# TODO add context to all counters.
 COUNTERS = {
   "Counter": {
     "-A": {
