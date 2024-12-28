@@ -4,7 +4,9 @@ from simple_said.kutils import (
   determine_keri_version,
   get_version_string_info,
   b64_to_int,
-  is_bytes
+  is_bytes,
+  dict_to_keri_byte_str,
+  deepcopy
   
 )
 import operator
@@ -32,16 +34,18 @@ STARTING_TRITETS = {
 
 
 def get_stream_tritet(stream):
-  # to bytes
-  if not is_bytes(stream):
-    # print(stream)
-    stream = stream.encode()
-    
-  first_byte = stream[0]
-  first_bits = byte_to_bits(first_byte)
-  first_tritet = first_bits[0:3]
+    # to bytes
+    if not is_bytes(stream):
+      # print(stream)
+      stream = stream.encode()
+    if len(stream) < 1:
+      return ('DONE', 'XXX')
+      
+    first_byte = stream[0]
+    first_bits = byte_to_bits(first_byte)
+    first_tritet = first_bits[0:3]
 
-  return (STARTING_TRITETS[first_tritet],first_tritet) 
+    return (STARTING_TRITETS[first_tritet],first_tritet) 
 
 # Define a mapping for operators
 operator_map = {
@@ -51,6 +55,7 @@ operator_map = {
     '/': operator.truediv,
     '**': operator.pow,
 }
+
 def evaluate_operation(operation_string,base_value):
     # Extract the operator and the number
     operator_symbol = operation_string[0]
@@ -63,148 +68,266 @@ def evaluate_operation(operation_string,base_value):
         raise ValueError(f"Unsupported operator: {operator_symbol}")
 
 
-# get counter
-# get counter
-def get_counter(s):
-  if is_bytes(s):
-    s = s.decode('utf-8')
-  counter_code = s[:2]
-  print('counter_code', counter_code)
-  if counter_code not in COUNTERS['Counter']:
-    print(counter_code in COUNTERS['Counter'], counter_code,s[:100])
-    raise ValueError(f"No counter found at stream start {s[:10]}...\n{COUNTERS['Counter']}")
-  counter = COUNTERS['Counter'][counter_code]
-  counter_size = SIZES['Counter'][counter_code]
-  counter['code'] = counter_code
-  counter.update(counter_size)
-  
-  fs = counter['fs']
-  ss = counter['ss']
-  hs = counter['hs']
-  ls = counter['ls']
-  full = s[:fs]
-  soft = s[hs:ss+hs+ls]
-  counter['full'] = full
-  counter['soft'] = soft
-  counter['num'] = b64_to_int(soft)
-  
-  if counter['units'] == 'CHAR':
-    counter['size'] = int(evaluate_operation(counter['count'], counter['num']))
-    counter['length'] = counter['size']
-  elif counter['units'] == 'SIGS':
-    print(counter)
-    counter['size'] = int(evaluate_operation(counter['count'], counter['num']))
-    counter['iterations'] = counter['size'] 
-  
-  # cv = counter['COUNT_VALUE']
-  # counter['value'] = COUNT_VALUES[cv]
-  print('counter')
-  pp.pprint(counter)
-  
-  # print(counter, 'type' in counter)
-  
-  return counter
+def parse_json(stream, cursor, everything):
+    this= stream[cursor:]
+    dvers = determine_keri_version(this)
+    if dvers == 1:
+    # print(1)
+        v_string = this[6:23]
+    else:
+        v_string = this[6:22]
 
-
-
-def parse_stream(stream):
-    stuff = []
-    cursor = 0
-    if is_bytes(stream):
-        stream = stream.decode('utf-8')
-
-    def parse_json(stream, cursor):
-        this= stream[cursor:]
-        dvers = determine_keri_version(this)
-        if dvers == 1:
-        # print(1)
-            v_string = this[6:23]
-        else:
-            v_string = this[6:22]
+    v_info = get_version_string_info(v_string, dvers)
+    size = v_info['size']
+    this_obj = {
+        'size': size,
+        # 'raw': dict_to_keri_byte_str(stream[cursor:cursor+size]),
+        'raw': stream[cursor:cursor+size],
+        'v_info': v_info,
+        'start': cursor,
+        'end': cursor+size,
+        'ked': True
+      }
+    cursor = cursor+size
+    print('='*88)
+    print(this_obj)
+    print('='*88)
+    everything[this_obj['start']] = this_obj
+    return cursor, this_obj, everything
   
-        v_info = get_version_string_info(v_string, dvers)
-        size = v_info['size']
-        this_obj = {
-            'size': size,
-            'raw': stream[cursor:cursor+size],
-            'v_info': v_info,
-            'start': cursor,
-            'end': cursor+size
-          }
-        cursor = cursor+size
-        return stream, cursor, this_obj
-        
-    def parse_cesr_t(stream, cursor):
-        struff = []
-        
-        def parse_sig(stream,cursor):
-            options = CODEX['IndexedSig']
-            this = stream[cursor:]
-            for o in options:
-                if o in this[:len(o)]:
-                    ## return sig.
-                    size = SIZES['Indexer'][o]['fs']
-                    return cursor + size, this[:size]
-            raise ValueError(f"SIG TYPE NOT FOUND {this[:188]}")
-                    
-                
-        def parse_cesr(stream,cursor, stuff=[]):
-            this = stream[cursor:]
-            counter = get_counter(this)
-            if counter['units'] == 'CHAR':
-                counter['size'] = int(evaluate_operation(counter['count'], counter['num']))
-                counter['length'] = counter['size']
-                end = counter['length']+ cursor
-                print(39, stream[cursor:end])
-                stuff.append( {
-                    'raw': stream[cursor:end] ,
-                    'counter': counter,
-                    'size': counter['length'],
-                    'start': cursor,
-                    'end': end,
-                    'type': counter['type'] if 'type' in counter else None,
-                    'name': counter['name']
-                  })
-                fs = counter['fs']
-                print(fs)
-                parse_cesr(stream, cursor+fs)
-                
-            elif counter['units'] == 'SIGS':
-                counter['size'] = int(evaluate_operation(counter['count'], counter['num']))
-                counter['iterations'] = counter['size']
-                stuff.append(counter)
-                cursor += counter['fs']
-                sigs = []
-                for i in range(counter['iterations']):
-                    cursor, sig = parse_sig(stream, cursor)
-                    sigs.append(sig)
-                stuff.append(sigs)
-                print(stuff)
-                cursor, stuff= parse_cesr(stream,cursor)
-                
-                    
-            return cursor, stuff
-        cursor, stuff = parse_cesr(stream,cursor)
-        return cursor, stuff
-                    
-        
-        
+
+def parse_codex(stream,cursor, codex):
+    print('codex', codex)
+    options = CODEX[codex]
+    size_type = 'Indexer'  if 'Index' in codex else 'Matter'
     
-    def parse(stream, cursor):
-        this = stream[cursor:]
-        kind, _ = get_stream_tritet(this)
-        stuff = []
-        if kind == 'JSON':
-            stream, cursor, obj = parse_json(stream, cursor)
-            stuff.append(obj)
-            parse(stream, cursor)
-            
-        elif kind == 'CESR_T_COUNT_CODE':
-            cursor, obj = parse_cesr_t(stream, cursor)
-            stuff.append(obj)
-            print(stuff)
-            parse(stream,cursor)
+    
+    this = stream[cursor:]
+    for o in options:
+        if o in this[:len(o)]:
+            ## return sig.
+            size = SIZES[size_type][o]['fs']
+            # print(o, size_type)
+            # print('size', size,this[:44])
+            return cursor + size, this[:size]
+    raise ValueError(f"SIG TYPE NOT FOUND {this[:188]}")
+  
+def build_thing(stream, cursor, typ, code, last_codex):
+    name = CODEX[typ][code]
+    s = stream[cursor:]
+    parent = last_codex
+    # is_matter = True if 'Index' not in name and 'Index' and code[0] != '-' not in typ else False
+    # size_ref = 'Matter' 
+    # if not is_matter:
+    #   size_ref = 'Indexer' if code[0]!= '-' else 'Counter'
+    t = {
+      code: CODEX[typ][code],
+      'typ': typ,
+      'code': code,
+      'name': CODEX[typ][code],
+      }
+    if typ in SIZES:
+      t.update(SIZES[typ][code])
+    else:
+      t.update(SIZES['Matter'][code])
+    fs = t['fs']
+    ss = t['ss']
+    hs = t['hs']
+    ls = t['ls']
+    t['hs_char'] = s[:hs]
+    t['ss_char'] = s[hs:ss+hs]
+    t['hs_value'] = b64_to_int(s[:hs]) 
+    t['ss_value'] = b64_to_int(s[hs:ss+hs]) 
+    t['root_data'] = s[hs+ss:fs]
+    t['full_data'] = s[:fs]
+    t['start'] = cursor
+    t['end'] =  cursor+fs
+    t['num'] = b64_to_int(s[hs:fs]) 
+    t['ked'] = False
+    t['parent_start'] = parent
+    if 'Counter' in typ:
+      t.update(COUNTERS[typ][code])
+      t['is_counter'] = True
+    else:
+      t['is_counter'] = False
+    if 'count' in t:
+      t['size'] = int(evaluate_operation(t['count'], t['num']))
+    return t
+
+def sniff_codex(stream, cursor, last_codex):
+  this = stream[cursor:]
+  codexes = []
+  if this[0] == '-':
+    codexes = ['Counter', 'AltCounter']
+  elif 'Counter' in last_codex[0]:
+    codexes = ['Indexer','Matter']
+  else:
+    codexes = [last_codex[0]]
+  for codex in codexes:
+    these_codexes = CODEX[codex]
+    for c in these_codexes:
+      if this[:len(c)] == c:
+        return codex, c
+  print(170,codexes)
+  return None, None
+
+def reorganize_attachments(attachments):
+  has_attachment_root = False
+  attachment_root = None
+  reorganized_attachments = {}
+  for k in attachments:
+    if attachments[k]['name'] == 'AttachedMaterialQuadlets':
+      has_attachment_root = True
+      attachment_root = k
+      break
+  if has_attachment_root:
+    reorganized_attachments = deepcopy(attachments[attachment_root])
+    reorganized_attachments['children'] = {}
+    for k in attachments:
+      if k != attachment_root:
+        reorganized_attachments['children'][k] = deepcopy(attachments[k])
+  else:
+    reorganized_attachments = attachments
+  return reorganized_attachments
+
+def process_counter(stream, cursor, last_codex):
+  
+  def process_counter_internals(stream, cursor, last_codex,internals):
+    # print(176,stream[cursor])
+    nonlocal all_internals
+    nonlocal global_cursor
+    tritet, tri = get_stream_tritet(stream[cursor:])
+    if tritet == 'JSON' or tritet == 'DONE':
+      print('END')
+      print(len(internals),cursor)
+     
+      # TODO: is this nesting necessary or just dump as flat with ref to parent?
+      reorganized = reorganize_attachments(internals)
+      # nonlocal all_internals
+      # nonlocal global_cursor
+      all_internals = deepcopy(reorganized)
+      # all_internals = deepcopy(internals)
+      global_cursor = cursor
+    else:
+      this_codex, this_code = sniff_codex(stream, cursor,last_codex )
+      if this_codex is None:
+        print(last_codex)
+        print(cursor)
+        print(len(stream))
+        print(stream[cursor:cursor+188])
+      thing = build_thing(stream, cursor, this_codex, this_code, last_codex)
+      if thing['is_counter'] and thing['context'] == ['CHAR']:
+        thing['raw'] = stream[cursor:cursor+thing['fs']+thing['size']]
+        thing['raw_end'] = cursor+thing['fs']+thing['size']    
+        internals[thing['start']] = thing
+        last_codex = (thing['typ'], thing['start'])
+        process_counter_internals(stream, cursor+thing['fs'], last_codex,internals)
+      elif thing['is_counter']:
+        thing['children'] = {}
+        stash = []
+        current_cursor = cursor+thing['fs']
+        _this_codex = (thing['typ'], thing['start'])
+        for i in range(thing['size']):
+          for context in thing['context']:
+            sniffed_codex, sniffed_code = sniff_codex(stream, current_cursor, (context, None))
+            context_thing = build_thing(stream,current_cursor, sniffed_codex, sniffed_code, _this_codex)
+            current_cursor = context_thing['end']
+            thing['children'][context_thing['start']] = context_thing
+            stash.append(context_thing)
+        thing['raw'] = stream[thing['start']:current_cursor]
+        thing['raw_end'] = current_cursor
+        internals[thing['start']] = thing
+        # for s in stash:
+        #   internals[s['start']] = s
+      
+        process_counter_internals(stream, current_cursor,last_codex, internals)
+      else:
+        internals[thing['start']] = thing
+        tritet, tri = get_stream_tritet(stream[thing['end']:])
+        if tritet == 'JSON':
+          print('END')
+          print(len(internals), thing['end'])
+          reorganized= reorganize_attachments(internals)    
+          # nonlocal all_internals
+          # nonlocal global_cursor
+          all_internals = deepcopy(reorganized)
+          global_cursor = thing['end']
         
-        return stuff
-    stuff = parse(stream, 0)
-    return stuff
+  all_internals = {}
+  global_cursor = cursor
+  process_counter_internals(stream, cursor, last_codex,internals={})
+  return all_internals, global_cursor
+    # raise ValueError('END')
+
+def parse_cesr(stream,cursor, last_codex, parent_starts, everything):#, stuff=[]):
+    this = stream[cursor:]
+    stuff = {}
+
+    kind, _ = get_stream_tritet(this)
+    if kind == 'JSON':
+      return cursor, stuff, everything
+    if kind == 'DONE':
+      print('DONE')
+      return cursor, stuff, everything
+    is_counter =False
+    proto_genus = 'STANDARD'
+    this_codex = None
+    this_code = None
+    if this[0] == '-': #and 'Counter' not in last_codex:
+      if this[1] == '-':
+        ## PROTOGENUS # TODO
+        pass
+
+      # codexes = ['Counter', 'AltCounter']
+      # codexes = ['Counter', 'Indexer']
+      # codexes = ['Matter', 'SmallVarRawSize', 'LargeVarRawSize','NonTrans', 'Num', 'Pre'] 
+      
+    this_codex, this_code = sniff_codex(stream, cursor, last_codex)
+    if 'Counter' in this_codex:
+      
+      # internals, cursor = process_counter_internals(stream,cursor,parent_starts[-1], {})
+      internals, cursor = process_counter(stream,cursor,parent_starts[-1])
+      everything[parent_starts[-1][1]]['attachments'] = internals
+      # everything.update(internals)
+
+    # last_codex = (thing['typ'], thing['start'])
+    # cursor += thing['fs']
+    return cursor, everything
+    # parse_cesr(stream,cursor, last_codex, parent_starts, everything)
+    
+    
+    
+def parse_stream(stream):
+    everything = {}
+    cursor = 0
+    last_codex = None
+    parent_starts = []
+    if is_bytes(stream):
+        stream = stream.decode('utf-8') 
+    def parse(stream, cursor):
+      nonlocal everything
+      nonlocal parent_starts
+      nonlocal last_codex
+      print(cursor)
+      this = stream[cursor:]
+      kind, _ = get_stream_tritet(this)
+      
+      if kind == 'JSON':
+          # time.sleep(.1)
+          
+          cursor, obj, everything = parse_json(stream, cursor, everything)
+          # stuff.append(obj)
+          print(obj['start'])
+          last_codex = 'KED'
+          parent_starts = [('KED', obj['start'])]
+          print(251, stream[cursor: cursor+50])
+          parse(stream, cursor)#, stuff)
+          
+      elif kind == 'CESR_T_COUNT_CODE':
+      
+          cursor,everything = parse_cesr(stream, cursor, last_codex, parent_starts,everything)
+          # stuff.append(obj)
+      
+          parse(stream,cursor)#, stuff)
+    parse(stream, cursor)
+    return everything

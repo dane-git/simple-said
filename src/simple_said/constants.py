@@ -3,7 +3,7 @@ COUNTERS = {
     "-A": {
       "name": "ControllerIdxSigs",
       "count": "*1",
-      "units": "SIGS",
+      "codex": "IndexedSig",
       "unit": "SIG",
       "context": [
         "Indexer"
@@ -17,7 +17,7 @@ COUNTERS = {
       "context": [
         "Indexer"
       ],
-      "units": "SIGS",
+      "codex": "IndexedSig",
     },
     "-C": {
       "name": "NonTransReceiptCouples",
@@ -28,16 +28,34 @@ COUNTERS = {
       "count": "*4"
     },
     "-E": {
-      "name": "FirstSeenReplayCouples",
-      "count": "*2"
+      "name": "EstablishmentSeqNum",
+      "count": "*1",
+      "codex": "Num",
+      'context': ['Num']
     },
+    # "-E": {
+    #   "name": "FirstSeenReplayCouples",
+    #   "count": "*2",
+    #   "disc": "sequence number of est event of signer's public keys for sigs",
+    #   'codex': 'Couples',
+    #   'context': [
+    #     'Num',
+    #     'Matter'
+    #   ]
+      
+    # },
     "-F": {
       "name": "TransIdxSigGroups",
       "count": "*4"
     },
     "-G": {
       "name": "SealSourceCouples",
-      "count": "*2"
+      "count": "*1",
+      'codex': 'Couples',
+      'context': [
+        'Num',
+        'Matter'
+      ]
     },
     "-H": {
       "name": "TransLastIdxSigGroups",
@@ -45,7 +63,13 @@ COUNTERS = {
     },
     "-I": {
       "name": "SealSourceTriples",
-      "count": "*3"
+      "count": "*1",
+      "desc": "Composed Base64 triple, pre+snu+dig of anchoring source event",
+      "context": [
+        "Matter",
+        "Num", 
+        "Matter"
+      ]
     },
     "-J": {
       "name": "SadPathSig",
@@ -61,10 +85,11 @@ COUNTERS = {
     "-V": {
       "name": "AttachedMaterialQuadlets",
       "count": "*4",
-      "units": "CHAR",
+      "codex": "CHAR",
       "unit": "QUADLET",
       "context": [
-        "Indexer"
+        # "Indexer"
+        'CHAR'
       ],
       'type': 'DIGEST_SEAL',
       
