@@ -181,11 +181,12 @@ def reorganize_attachments(attachments):
       attachment_root = k
       break
   if has_attachment_root:
-    reorganized_attachments = deepcopy(attachments[attachment_root])
-    reorganized_attachments['children'] = {}
+    reorganized_attachments = {}
+    reorganized_attachments[attachment_root] = deepcopy(attachments[attachment_root])
+    reorganized_attachments[attachment_root]['children'] = {}
     for k in attachments:
       if k != attachment_root:
-        reorganized_attachments['children'][k] = deepcopy(attachments[k])
+        reorganized_attachments[attachment_root]['children'][k] = deepcopy(attachments[k])
   else:
     reorganized_attachments = attachments
   return reorganized_attachments
